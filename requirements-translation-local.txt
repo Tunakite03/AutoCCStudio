@@ -1,0 +1,5 @@
+# Optional local translation provider. Install after requirements.txt when using
+# TRANSLATION_PROVIDER=transformers.
+transformers>=4.44.0
+sentencepiece>=0.2.0
+torch>=2.5.0
