@@ -8,9 +8,9 @@ import { acceptVideoFile, importSubtitleFile } from "./pipeline.js";
 
 const LAYOUT_KEY = "autocc.layout";
 const THEME_KEY = "autocc.theme";
-const BOUNDS = { left: [200, 460], right: [260, 560], dock: [150, 620] };
+const BOUNDS = { left: [200, 460], right: [260, 560], dock: [150, 620], inspector: [200, 600] };
 
-const layout = { left: 268, right: 340, dock: 272 };
+const layout = { left: 268, right: 340, dock: 272, inspector: 390 };
 
 /* ── Resizable panes ──────────────────────────────────────────── */
 
@@ -19,6 +19,7 @@ function applyLayout() {
   root.setProperty("--w-left", `${layout.left}px`);
   root.setProperty("--w-right", `${layout.right}px`);
   root.setProperty("--h-dock", `${layout.dock}px`);
+  root.setProperty("--h-inspector", `${layout.inspector}px`);
 }
 
 function persistLayout() {
@@ -42,8 +43,12 @@ function initSplitters() {
 
   $$(".splitter").forEach((splitter) => {
     const key = splitter.dataset.split;
-    const vertical = splitter.classList.contains("splitter-h");
-    // Left pane grows with the pointer; right pane and dock grow against it.
+    const vertical =
+      splitter.classList.contains("splitter-h") ||
+      key === "dock" ||
+      key === "inspector" ||
+      splitter.getAttribute("aria-orientation") === "horizontal";
+    // Left pane grows with the pointer; right pane, dock and inspector grow against it.
     const direction = key === "left" ? 1 : -1;
 
     const resize = (value) => {

@@ -51,7 +51,8 @@
       </nav>
 
       <div class="min-w-0 flex items-center gap-2.5 flex-auto pl-3 border-l border-line-soft">
-        <span class="mono flex-none px-1.5 py-0.5 border border-line rounded-[4px] text-muted text-[10px] tracking-[0.08em]"
+        <span
+          class="mono flex-none px-1.5 py-0.5 border border-line rounded-[4px] text-muted text-[10px] tracking-[0.08em]"
           id="project-kind">TRỐNG</span>
         <span class="min-w-0 overflow-hidden text-text-dim text-[12.5px] text-ellipsis whitespace-nowrap"
           id="project-name">Chưa mở project</span>
@@ -95,10 +96,9 @@
         class="workbench screen absolute inset-0 min-h-0 grid grid-cols-[var(--w-left)_5px_minmax(320px,1fr)_5px_var(--w-right)] max-tight:grid-cols-[var(--w-left)_5px_minmax(260px,1fr)_5px_var(--w-right)] max-stack:grid-cols-[minmax(0,1fr)] max-stack:grid-rows-[auto_auto_auto] max-stack:overflow-y-auto"
         id="workbench" data-screen="editor">
         <!-- Left: setup inspector -->
-        <aside
-          class="min-w-0 min-h-0 flex flex-col bg-panel max-stack:border-t max-stack:border-line-soft"
+        <aside class="min-w-0 min-h-0 flex flex-col bg-panel max-stack:border-t max-stack:border-line-soft"
           id="pane-left" aria-label="Thiết lập project">
-          <div class="min-h-0 flex-1 overflow-y-auto max-stack:overflow-visible p-3.5 flex flex-col gap-4.5">
+          <div class="min-h-0 flex-1 overflow-y-auto max-stack:overflow-visible p-3.5 pb-8 flex flex-col gap-4.5">
             <section class="flex flex-col gap-2">
               <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase">Nguồn</h2>
 
@@ -168,7 +168,7 @@
                   class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
                   id="source-language">
                   <optgroup label="Tự động / Đa ngôn ngữ">
-                    <option value="auto" selected>✨ Tự nhận diện (Auto-detect)</option>
+                    <option value="auto" selected> Tự nhận diện (Auto-detect)</option>
                     <option value="multi">🌐 Đa ngôn ngữ (Nova-3 Multilingual)</option>
                   </optgroup>
 
@@ -342,11 +342,8 @@
                 <span class="text-muted text-[11px] font-medium">Quy tắc riêng</span>
                 <textarea
                   class="w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-                  id="translation-style-notes"
-                  rows="4"
-                  maxlength="2000"
-                  placeholder="Mỗi dòng một ý. Thuật ngữ: 大哥 → đại ca&#10;Còn lại viết như một yêu cầu: giọng trẻ, không dùng từ Hán Việt nặng"
-                ></textarea>
+                  id="translation-style-notes" rows="4" maxlength="2000"
+                  placeholder="Mỗi dòng một ý. Thuật ngữ: 大哥 → đại ca&#10;Còn lại viết như một yêu cầu: giọng trẻ, không dùng từ Hán Việt nặng"></textarea>
               </label>
 
               <button id="translate-btn"
@@ -514,7 +511,8 @@
             </div>
           </section>
 
-          <div class="splitter relative bg-line-soft transition-[background-color] duration-140 cursor-row-resize"
+          <div
+            class="splitter splitter-h relative bg-line-soft transition-[background-color] duration-140 cursor-row-resize flex-none"
             data-split="dock" role="separator" aria-orientation="horizontal" tabindex="0"
             aria-label="Kéo để đổi cao timeline"></div>
 
@@ -610,8 +608,8 @@
                     <path d="M5 12h14" />
                   </svg>
                 </button>
-                <input class="w-27.5 h-4.5 cursor-pointer" id="zoom-range" type="range" min="0" max="100"
-                  value="40" aria-label="Mức phóng timeline" />
+                <input class="w-27.5 h-4.5 cursor-pointer" id="zoom-range" type="range" min="0" max="100" value="40"
+                  aria-label="Mức phóng timeline" />
                 <button
                   class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
                   id="zoom-in" type="button" title="Phóng to (+)" aria-label="Phóng to timeline">
@@ -626,8 +624,7 @@
             </div>
 
             <div class="min-h-0 grid grid-cols-[104px_minmax(0,1fr)] bg-ground" id="timeline">
-              <div
-                class="grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)] border-r border-line bg-panel">
+              <div class="grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)] border-r border-line bg-panel">
                 <div
                   class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-faint bg-raised text-[10px] tracking-[0.09em]">
                   <span class="mono">TIMECODE</span>
@@ -650,8 +647,7 @@
               </div>
 
               <div class="relative min-w-0 overflow-x-auto overflow-y-hidden" id="timeline-scroll">
-                <div
-                  class="relative h-full min-w-full grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)]"
+                <div class="relative h-full min-w-full grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)]"
                   id="timeline-canvas">
                   <div class="lane relative min-h-0 border-b border-line bg-raised"><canvas id="ruler-canvas"></canvas>
                   </div>
@@ -681,25 +677,30 @@
         <aside
           class="min-w-0 min-h-0 flex flex-col bg-panel border-l border-line-soft max-stack:h-[70vh] max-stack:border-l-0 max-stack:border-t"
           id="pane-right" aria-label="Danh sách và chi tiết cue">
-          <div class="flex items-center justify-between h-8.5 px-3 border-b border-line-soft">
+          <div class="flex items-center justify-between h-8.5 px-3 border-b border-line-soft flex-none">
             <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase">Danh sách cue</h2>
             <span class="mono px-1.75 py-px border border-line rounded-full text-muted text-[10.5px]"
               id="cue-count">0</span>
           </div>
 
-          <div class="flex-auto min-h-35 overflow-y-auto p-1.5 flex flex-col gap-0.75" id="cue-list"
-            aria-label="Cue">
+          <div class="flex-1 min-h-30 overflow-y-auto p-1.5 flex flex-col gap-0.75" id="cue-list" aria-label="Cue">
             <div class="m-auto px-4.5 py-6 text-muted text-center" id="list-empty">
               <p class="text-[12.5px]">Chưa có cue nào.</p>
-              <small class="block mt-1.5 text-faint text-[11px] leading-normal">Chọn video để AI nhận dạng, hoặc nhập file
+              <small class="block mt-1.5 text-faint text-[11px] leading-normal">Chọn video để AI nhận dạng, hoặc nhập
+                file
                 SRT/VTT sẵn có.</small>
             </div>
           </div>
 
           <div
-            class="inspector flex-[0_1_auto] min-h-0 overflow-y-auto flex flex-col gap-2.25 p-3 border-t border-line bg-ground"
-            id="inspector" data-empty="true">
-            <div class="flex items-center justify-between">
+            class="splitter splitter-h relative h-1.5 w-full bg-line-soft transition-[background-color] duration-140 cursor-row-resize flex-none hover:bg-accent-line"
+            data-split="inspector" role="separator" aria-orientation="horizontal" tabindex="0"
+            aria-label="Kéo để đổi cao inspector"></div>
+
+          <div
+            class="inspector flex-none min-h-0 overflow-y-auto flex flex-col gap-2 p-3 border-t border-line bg-ground"
+            id="inspector" data-empty="true" style="height: var(--h-inspector, 390px); max-height: 70vh;">
+            <div class="flex items-center justify-between shrink-0">
               <span class="mono text-muted text-[10px] tracking-widest uppercase" id="inspector-index">—</span>
               <div class="flex gap-0.5">
                 <button
@@ -717,27 +718,27 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-[1fr_1fr_76px] gap-1.5">
-              <label class="flex flex-col gap-1.25 min-w-0" for="insp-start">
+            <div class="grid grid-cols-[1fr_1fr_76px] gap-1.5 shrink-0">
+              <label class="flex flex-col gap-1 min-w-0" for="insp-start">
                 <span class="text-muted text-[11px] font-medium">Vào</span>
                 <input id="insp-start"
-                  class="mono w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+                  class="mono w-full h-7 px-2 py-1 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
                   type="text" inputmode="decimal" autocomplete="off" />
               </label>
-              <label class="flex flex-col gap-1.25 min-w-0" for="insp-end">
+              <label class="flex flex-col gap-1 min-w-0" for="insp-end">
                 <span class="text-muted text-[11px] font-medium">Ra</span>
                 <input id="insp-end"
-                  class="mono w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+                  class="mono w-full h-7 px-2 py-1 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
                   type="text" inputmode="decimal" autocomplete="off" />
               </label>
-              <div class="flex flex-col gap-1.25 min-w-0">
+              <div class="flex flex-col gap-1 min-w-0">
                 <span class="text-muted text-[11px] font-medium">Dài</span>
                 <output id="insp-duration"
-                  class="mono block px-2 py-1.5 border border-line-soft rounded-sm bg-panel text-muted text-[12px]">0.000</output>
+                  class="mono flex items-center h-7 px-2 border border-line-soft rounded-sm bg-panel text-muted text-[12px]">0.000</output>
               </div>
             </div>
 
-            <div class="flex gap-1.5">
+            <div class="flex gap-1.5 shrink-0">
               <button
                 class="tool flex flex-1 items-center justify-center gap-1.5 h-6.5 px-2 border border-line rounded-sm bg-raised text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi disabled:opacity-35"
                 id="mark-in" type="button" title="Đặt điểm vào tại playhead (I)"><span
@@ -748,21 +749,21 @@
                   class="mono px-1 rounded-[3px] bg-panel text-accent text-[10px]">O</span> Lấy ra</button>
             </div>
 
-            <label class="flex flex-col gap-1.25 min-w-0" for="insp-text">
+            <label class="flex flex-col gap-1 min-w-0 shrink-0" for="insp-text">
               <span class="text-muted text-[11px] font-medium">Văn bản gốc</span>
               <textarea id="insp-text"
-                class="w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-                rows="3" spellcheck="false"></textarea>
+                class="w-full h-15 min-h-12 px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)] shrink-0"
+                spellcheck="false"></textarea>
             </label>
 
-            <label class="flex flex-col gap-1.25 min-w-0" for="insp-translation">
+            <label class="flex flex-col gap-1 min-w-0 shrink-0" for="insp-translation">
               <span class="text-muted text-[11px] font-medium">Bản dịch</span>
               <textarea id="insp-translation"
-                class="w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-                rows="3" spellcheck="false"></textarea>
+                class="w-full h-15 min-h-12 px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)] shrink-0"
+                spellcheck="false"></textarea>
             </label>
 
-            <div class="grid grid-cols-3 gap-1.5 pt-0.5" id="meters">
+            <div class="grid grid-cols-3 gap-1.5 pt-0.5 shrink-0" id="meters">
               <div class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel">
                 <span class="mono text-faint text-[9px] tracking-[0.09em]">KÝ TỰ</span>
                 <strong class="mono text-text-dim text-[13px] font-semibold" id="meter-chars">0</strong>
@@ -797,8 +798,7 @@
                   <circle cx="11" cy="11" r="6.5" />
                   <path d="m16 16 4 4" />
                 </svg>
-                <input
-                  class="w-47.5 max-dense:w-full border-0 bg-transparent text-text text-[12.5px] outline-none"
+                <input class="w-47.5 max-dense:w-full border-0 bg-transparent text-text text-[12.5px] outline-none"
                   id="dash-search" type="search" placeholder="Tìm theo tên file…" autocomplete="off" />
               </label>
               <button
@@ -812,8 +812,7 @@
             </div>
           </header>
 
-          <section
-            class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5 mb-5"
+          <section class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5 mb-5"
             aria-label="Tổng quan workspace">
             <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
               <span class="mono text-faint text-[9.5px] tracking-widest">PROJECT</span>
@@ -822,12 +821,14 @@
             </div>
             <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
               <span class="mono text-faint text-[9.5px] tracking-widest">THỜI LƯỢNG PHỤ ĐỀ</span>
-              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]" id="stat-duration">0:00</strong>
+              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
+                id="stat-duration">0:00</strong>
               <span class="text-muted text-[11px]" id="stat-duration-note">—</span>
             </div>
             <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
               <span class="mono text-faint text-[9.5px] tracking-widest">CUE</span>
-              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]" id="stat-cues-total">0</strong>
+              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
+                id="stat-cues-total">0</strong>
               <span class="text-muted text-[11px]" id="stat-cues-note">—</span>
             </div>
             <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
@@ -856,8 +857,8 @@
             <span class="mono text-faint text-[11px]" id="dash-count">0 project</span>
           </div>
 
-          <div class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fill,minmax(236px,1fr))] gap-3.5"
-            id="project-grid"></div>
+          <div class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fill,minmax(236px,1fr))] gap-3.5" id="project-grid">
+          </div>
 
           <div class="max-w-360 mx-auto grid justify-items-center gap-1.75 px-5 py-14 text-muted text-center"
             id="dash-empty" hidden>
@@ -874,13 +875,17 @@
 
     <!-- ── Status bar ────────────────────────────────────────────── -->
     <footer
-      class="flex items-center gap-3.5 px-3 border-t border-line-soft bg-panel text-muted text-[11px]">
+      class="flex items-center gap-3 h-(--h-status) px-3 border-t border-line-soft bg-panel text-muted text-[11px] select-none z-10 overflow-hidden">
       <span class="overflow-hidden text-ellipsis whitespace-nowrap text-text-dim" id="status-message">Sẵn sàng</span>
-      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap" id="status-cues">0 cue</span>
-      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap" id="status-language">—</span>
+      <span class="w-px h-2.5 bg-line-soft flex-none" aria-hidden="true"></span>
+      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-cues">0 cue</span>
+      <span class="w-px h-2.5 bg-line-soft flex-none" aria-hidden="true"></span>
+      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-language">—</span>
       <span class="flex-1"></span>
-      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap" id="status-zoom">60 px/s</span>
-      <span class="overflow-hidden text-ellipsis whitespace-nowrap" id="status-storage">Workspace cục bộ</span>
+      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-zoom">60 px/s</span>
+      <span class="w-px h-2.5 bg-line-soft flex-none" aria-hidden="true"></span>
+      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-storage">Workspace cục
+        bộ</span>
     </footer>
 
     <div
@@ -936,7 +941,8 @@
             <path d="m6 6 12 12M18 6 6 18" />
           </svg></button>
       </div>
-      <div class="grid grid-cols-2 gap-y-1.5 gap-x-4.5 px-4 py-3.5 [&>div]:flex [&>div]:items-center [&>div]:gap-2.5 [&>div]:text-[12px] [&>div]:text-text-dim [&_kbd]:min-w-17 [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10.5px] [&_kbd]:text-center">
+      <div
+        class="grid grid-cols-2 gap-y-1.5 gap-x-4.5 px-4 py-3.5 [&>div]:flex [&>div]:items-center [&>div]:gap-2.5 [&>div]:text-[12px] [&>div]:text-text-dim [&_kbd]:min-w-17 [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10.5px] [&_kbd]:text-center">
         <div><kbd class="mono">Space</kbd><span>Phát / dừng</span></div>
         <div><kbd class="mono">← →</kbd><span>Lùi / tiến 1 frame</span></div>
         <div><kbd class="mono">Shift ← →</kbd><span>Nhảy 1 giây</span></div>
@@ -954,9 +960,10 @@
         <div><kbd class="mono">M</kbd><span>Tắt tiếng</span></div>
         <div><kbd class="mono">Ctrl ↵</kbd><span>Chạy nhận dạng AI</span></div>
       </div>
-      <p class="px-4 pb-4 text-muted text-[11.5px] leading-[1.6] [&_kbd]:px-1 [&_kbd]:py-px [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10px]">
-        Trên timeline: kéo thân clip để dời, kéo mép để co giãn, kéo thước để tua. Giữ <kbd
-          class="mono">Ctrl</kbd> khi lăn chuột để phóng. Đang phát mà kéo thì video tạm dừng và tự chạy tiếp khi thả
+      <p
+        class="px-4 pb-4 text-muted text-[11.5px] leading-[1.6] [&_kbd]:px-1 [&_kbd]:py-px [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10px]">
+        Trên timeline: kéo thân clip để dời, kéo mép để co giãn, kéo thước để tua. Giữ <kbd class="mono">Ctrl</kbd> khi
+        lăn chuột để phóng. Đang phát mà kéo thì video tạm dừng và tự chạy tiếp khi thả
         chuột.</p>
     </dialog>
   </div>
