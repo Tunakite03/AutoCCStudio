@@ -140,6 +140,8 @@ def translation_task(
     source_language: str | None = None,
     style: str = STYLE_AUTO,
     style_notes: str = "",
+    provider: str | None = None,
+    model: str | None = None,
 ):
     def run(context: JobContext) -> None:
         job = context.read()
@@ -165,11 +167,17 @@ def translation_task(
             or job.get("source_language"),
             style=style,
             style_notes=style_notes,
+            provider=provider or job.get("translation_provider"),
+            model=model or job.get("translation_model"),
         )
 
         with context.edit() as opened:
             opened["cues"] = cues
             opened["target_language"] = target_language
+            if provider:
+                opened["translation_provider"] = provider
+            if model:
+                opened["translation_model"] = model
             finish(opened)
 
     return run

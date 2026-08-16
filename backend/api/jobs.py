@@ -13,6 +13,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
+from ..ai import (
+    TRANSLATION_OPENAI_COMPATIBLE,
+    TRANSLATION_TRANSFORMERS,
+    resolve_translation_provider,
+)
 from ..config import settings
 from ..jobs import JobConflict, runner, store
 from ..jobs.model import (
@@ -57,6 +62,8 @@ class TranslatePayload(BaseModel):
     target_language: str
     style: str = STYLE_AUTO
     style_notes: str = ""
+    provider: str = ""
+    model: str = ""
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -143,6 +150,8 @@ def _job_summary(job: dict, job_dir: Path) -> dict:
         "source_language": job.get("source_language"),
         "target_language": job.get("target_language"),
         "transcription_provider": job.get("transcription_provider"),
+        "translation_provider": job.get("translation_provider"),
+        "translation_model": job.get("translation_model"),
         "speaker_analysis_status": job.get("speaker_analysis_status"),
         "updated_at": updated_at,
         "size_bytes": size_bytes,
@@ -167,6 +176,39 @@ def _resolve_engine(provider: str, model: str, model_size: str = "") -> tuple[st
     if len(selected_model) > 128:
         raise HTTPException(status_code=400, detail="Tên model quá dài")
     return provider, selected_model
+
+
+from .. import ai
+
+
+def _resolve_translation_engine(provider: str, model: str) -> tuple[str, str]:
+    """Validate the translation engine and settle on a model name."""
+
+    raw_provider = provider.strip() or ai.settings.translation_provider
+    resolved_provider = ai.resolve_translation_provider(raw_provider)
+
+    if resolved_provider == ai.TRANSLATION_OPENAI_COMPATIBLE and not ai.settings.llm_base_url.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="LLM chưa được cấu hình. Thêm LLM_BASE_URL vào file .env rồi khởi động lại app.",
+        )
+    if resolved_provider == ai.TRANSLATION_TRANSFORMERS:
+        default_transformers_model = ai.settings.translation_model.strip()
+        if not (model.strip() or default_transformers_model):
+            raise HTTPException(
+                status_code=400,
+                detail="TRANSLATION_MODEL chưa được cấu hình cho Transformers local.",
+            )
+
+    default_model = (
+        ai.settings.translation_model
+        if resolved_provider == ai.TRANSLATION_TRANSFORMERS
+        else ai.settings.llm_model
+    )
+    selected_model = model.strip() or default_model
+    if len(selected_model) > 128:
+        raise HTTPException(status_code=400, detail="Tên model quá dài")
+    return resolved_provider, selected_model
 
 
 def _normalise_language(source_language: str) -> str | None:
@@ -351,12 +393,18 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
     if style != STYLE_AUTO and style not in STYLES:
         raise HTTPException(status_code=400, detail="Phong cách dịch không hợp lệ")
 
+    resolved_provider, selected_model = _resolve_translation_engine(
+        payload.provider, payload.model
+    )
+
     with _claim(job_id, "Job đang xử lý") as job:
         if not job.get("cues"):
             raise HTTPException(status_code=400, detail="Job chưa có cue để dịch")
         job["status"] = STATUS_PROCESSING
         job["error"] = None
         job["target_language"] = target_language
+        job["translation_provider"] = resolved_provider
+        job["translation_model"] = selected_model
         job["translation_style"] = style
         job["translation_style_notes"] = style_notes
         source_language = job.get("detected_language") or job.get("source_language")
@@ -370,6 +418,8 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
             source_language=source_language,
             style=style,
             style_notes=style_notes,
+            provider=resolved_provider,
+            model=selected_model,
         ),
     )
     return snapshot

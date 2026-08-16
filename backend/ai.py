@@ -723,15 +723,25 @@ def _transformers_pipeline(model_name: str, device_name: str):
         raise AIProviderError(f"Không tải được translation model {model_name}: {exc}") from exc
 
 
-def _translate_batch_transformers(texts: list[str], target_language: str) -> list[str]:
+def _translate_batch_transformers(
+    texts: list[str],
+    target_language: str,
+    *,
+    model_name: str | None = None,
+) -> list[str]:
     expected_language = settings.transformers_target_language.strip().casefold()
     if expected_language and target_language.strip().casefold() != expected_language:
         raise AIProviderError(
             "Translation model local hiện chỉ được cấu hình cho "
             f"{settings.transformers_target_language}"
         )
+    chosen_model = (model_name or settings.translation_model).strip()
+    if not chosen_model:
+        raise AIProviderError(
+            "TRANSLATION_MODEL là bắt buộc khi TRANSLATION_PROVIDER=transformers"
+        )
     translator = _transformers_pipeline(
-        settings.translation_model,
+        chosen_model,
         settings.transformers_device,
     )
     try:
@@ -1162,6 +1172,7 @@ def _translate_lines_llm(
     context_after: list[dict],
     glossary: dict[str, str],
     style_rules: tuple[str, ...] = (),
+    model: str | None = None,
 ) -> tuple[dict[int, str], dict]:
     request: dict = {
         "target_language": target_language,
@@ -1211,6 +1222,7 @@ def _translate_lines_llm(
         ],
         temperature=0.2,
         operation="dịch phụ đề",
+        model=model,
     )
     value = _extract_json_value(content, "Model dịch")
     learned = value.get("glossary") if isinstance(value, dict) else None
@@ -1232,6 +1244,7 @@ def _translate_batch_llm(
     context_after: list[dict] = (),
     glossary: dict[str, str] | None = None,
     style: StyleBrief | None = None,
+    model: str | None = None,
 ) -> list[str]:
     """One request per batch, then per-line repair for whatever came back missing.
 
@@ -1260,6 +1273,7 @@ def _translate_batch_llm(
                 context_after=after,
                 glossary=terms,
                 style_rules=brief.rules,
+                model=model,
             )
         except AIResponseFormatError as exc:
             logger.warning("translation batch returned an unusable shape: %s", exc)
@@ -1314,6 +1328,8 @@ def _translate_batch(
     context_after: list[dict] = (),
     glossary: dict[str, str] | None = None,
     style: StyleBrief | None = None,
+    provider: str | None = None,
+    model: str | None = None,
 ) -> list[str]:
     """Translate one batch of subtitle lines.
 
@@ -1322,11 +1338,11 @@ def _translate_batch(
     """
 
     texts = [str(line.get("text", "")) for line in lines]
-    provider = resolve_translation_provider(settings.translation_provider)
-    if provider == TRANSLATION_MOCK:
+    resolved_provider = resolve_translation_provider(provider or settings.translation_provider)
+    if resolved_provider == TRANSLATION_MOCK:
         return [f"[{target_language}] {text}" for text in texts]
-    if provider == TRANSLATION_TRANSFORMERS:
-        return _translate_batch_transformers(texts, target_language)
+    if resolved_provider == TRANSLATION_TRANSFORMERS:
+        return _translate_batch_transformers(texts, target_language, model_name=model)
     return _translate_batch_llm(
         lines,
         target_language,
@@ -1334,6 +1350,7 @@ def _translate_batch(
         context_after=context_after,
         glossary=glossary,
         style=style,
+        model=model,
     )
 
 
@@ -1346,6 +1363,8 @@ def translate_cues(
     source_language: str | None = None,
     style: str = STYLE_AUTO,
     style_notes: str = "",
+    provider: str | None = None,
+    model: str | None = None,
 ) -> list[dict]:
     """Translate line by line, keeping dialogue breaks intact.
 
@@ -1411,6 +1430,8 @@ def translate_cues(
             context_after=lines[end : end + TRANSLATION_CONTEXT_AFTER],
             glossary=glossary,
             style=brief,
+            provider=provider,
+            model=model,
         )
         if len(translations) != len(batch):
             raise AIProviderError(

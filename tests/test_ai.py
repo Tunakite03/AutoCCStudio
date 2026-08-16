@@ -809,3 +809,19 @@ def test_transformer_provider_rejects_wrong_target_language(monkeypatch):
         assert "Tiếng Việt" in str(error)
     else:
         raise AssertionError("expected target-language validation error")
+
+
+def test_translate_cues_forwards_custom_model(monkeypatch):
+    called_models = []
+
+    def mock_completion(messages, *, temperature, operation, model=None):
+        called_models.append(model)
+        return json.dumps({"translations": {"1": "Xin chào"}})
+
+    _hosted_translation(monkeypatch, mock_completion)
+
+    cues = [{"id": 1, "start": 0.0, "end": 1.0, "text": "Hello", "translation": ""}]
+    result = ai.translate_cues(cues, "Tiếng Việt", model="custom-gpt-model")
+
+    assert called_models == ["custom-gpt-model"]
+    assert result[0]["translation"] == "Xin chào"

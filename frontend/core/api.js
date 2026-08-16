@@ -39,7 +39,7 @@ export const api = {
     request(`/api/jobs/${jobId}/split-long-cues`, { method: "POST" }),
 
 
-  translate: (jobId, targetLanguage, style = "auto", styleNotes = "") =>
+  translate: (jobId, targetLanguage, style = "auto", styleNotes = "", provider = "", model = "") =>
     request(`/api/jobs/${jobId}/translate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -47,6 +47,8 @@ export const api = {
         target_language: targetLanguage,
         style,
         style_notes: styleNotes,
+        provider,
+        model,
       }),
     }),
 

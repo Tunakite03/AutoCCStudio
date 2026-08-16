@@ -129,6 +129,8 @@ export async function translate() {
       $("#target-language").value,
       $("#translation-style").value,
       $("#translation-style-notes").value,
+      $("#translation-provider").value,
+      $("#translation-model").value,
     );
     adoptJob(job, { keepSelection: true });
     toast("Đã đưa phụ đề vào hàng đợi dịch", "success");
@@ -206,6 +208,37 @@ function syncModelOptions(preferred = "") {
   updateEngineChip();
 }
 
+function syncTranslationModelOptions(preferred = "") {
+  const provider = $("#translation-provider").value;
+  const select = $("#translation-model");
+  const capabilities = state.capabilities;
+  const configured =
+    provider === "transformers"
+      ? capabilities?.translation_model
+      : capabilities?.llm_model || capabilities?.translation_model;
+  const options = [...(capabilities?.translation_models?.[provider] || [])];
+
+  if (configured && !options.some((item) => item.value === configured)) {
+    options.push({ value: configured, label: `${configured} — từ .env` });
+  }
+  if (options.length) {
+    select.replaceChildren(
+      ...options.map((item) => {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = item.label;
+        return option;
+      }),
+    );
+  }
+  const target = preferred || configured || options[0]?.value || "";
+  if ([...select.options].some((option) => option.value === target)) select.value = target;
+  select.disabled = options.length === 0;
+  $("#translation-model-label").textContent =
+    provider === "transformers" ? "Model Transformers" : "Model LLM";
+  if (capabilities) renderCapabilityNote(capabilities);
+}
+
 function updateEngineChip() {
   const provider = $("#transcription-provider").value;
   const model = $("#transcription-model").value;
@@ -220,11 +253,17 @@ function updateEngineChip() {
 function renderCapabilityNote(capabilities) {
   const whisper = capabilities.whisper_available ? capabilities.whisper_model : "chưa cài";
   const deepgram = capabilities.deepgram_configured ? capabilities.deepgram_model : "thiếu API key";
-  // The model, like every other row — the provider name alone said nothing
-  // about what is doing the translating.
-  const translation = capabilities.translation_configured
-    ? capabilities.translation_model || capabilities.translation_provider
-    : `${capabilities.translation_provider} (chưa cấu hình)`;
+
+  const currentTransProvider = $("#translation-provider")?.value || capabilities.translation_provider;
+  const currentTransModel = $("#translation-model")?.value || capabilities.translation_model;
+  const translationReady =
+    currentTransProvider === "transformers"
+      ? capabilities.transformers_available && Boolean(currentTransModel)
+      : capabilities.llm_configured;
+  const translation = translationReady
+    ? currentTransModel || currentTransProvider
+    : `${currentTransProvider} (chưa cấu hình)`;
+
   const speakerAnalysis = $("#speaker-analysis");
   speakerAnalysis.disabled = !capabilities.speaker_analysis_configured;
   if (!capabilities.speaker_analysis_configured) speakerAnalysis.checked = false;
@@ -254,16 +293,23 @@ function syncStyleOptions(capabilities) {
   }
 }
 
-/** Show a reopened project the style it was actually translated with. */
-function restoreStyleFromJob() {
+/** Show a reopened project the style, provider and model it was actually translated with. */
+function restoreTranslationFromJob() {
   const job = state.job;
   if (!job) return;
-  const select = $("#translation-style");
-  if (job.translation_style && [...select.options].some((o) => o.value === job.translation_style)) {
-    select.value = job.translation_style;
+  const styleSelect = $("#translation-style");
+  if (job.translation_style && [...styleSelect.options].some((o) => o.value === job.translation_style)) {
+    styleSelect.value = job.translation_style;
   }
   if (typeof job.translation_style_notes === "string") {
     $("#translation-style-notes").value = job.translation_style_notes;
+  }
+  const providerSelect = $("#translation-provider");
+  if (job.translation_provider && [...providerSelect.options].some((o) => o.value === job.translation_provider)) {
+    providerSelect.value = job.translation_provider;
+    syncTranslationModelOptions(job.translation_model || "");
+  } else if (job.translation_model) {
+    syncTranslationModelOptions(job.translation_model);
   }
 }
 
@@ -275,9 +321,14 @@ export async function loadCapabilities() {
     if ($(`#transcription-provider option[value="${capabilities.transcription_provider}"]`)) {
       providerSelect.value = capabilities.transcription_provider;
     }
+    const transProviderSelect = $("#translation-provider");
+    if ($(`#translation-provider option[value="${capabilities.translation_provider}"]`)) {
+      transProviderSelect.value = capabilities.translation_provider;
+    }
     syncModelOptions();
+    syncTranslationModelOptions();
     syncStyleOptions(capabilities);
-    restoreStyleFromJob();
+    restoreTranslationFromJob();
     renderCapabilityNote(capabilities);
   } catch {
     $("#capability-note").textContent = "Không đọc được cấu hình backend.";
@@ -315,13 +366,17 @@ export function mountPipeline() {
   $("#translate-btn").addEventListener("click", translate);
   $("#transcription-provider").addEventListener("change", () => syncModelOptions());
   $("#transcription-model").addEventListener("change", updateEngineChip);
+  $("#translation-provider").addEventListener("change", () => syncTranslationModelOptions());
+  $("#translation-model").addEventListener("change", () => {
+    if (state.capabilities) renderCapabilityNote(state.capabilities);
+  });
 
   $("#download-source-srt").addEventListener("click", () => downloadSubtitle("source", "srt"));
   $("#download-translated-srt").addEventListener("click", () => downloadSubtitle("translated", "srt"));
   $("#download-vtt").addEventListener("click", () => downloadSubtitle("translated", "vtt"));
   $("#mux-btn").addEventListener("click", muxVideo);
 
-  on("job:loaded", restoreStyleFromJob);
+  on("job:loaded", restoreTranslationFromJob);
   onAny(["job:loaded", "cues:changed"], refreshButtons);
   on("capabilities:loaded", refreshButtons);
   refreshButtons();

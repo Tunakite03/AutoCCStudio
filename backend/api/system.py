@@ -34,6 +34,27 @@ TRANSCRIPTION_MODELS = {
 }
 
 
+TRANSLATION_MODELS = {
+    "openai_compatible": [
+        {"value": "mistral-small-latest", "label": "Mistral Small — nhanh, tự nhiên"},
+        {"value": "mistral-large-latest", "label": "Mistral Large — chất lượng cao"},
+        {"value": "open-mistral-nemo", "label": "Mistral Nemo 12B — cân bằng"},
+        {"value": "gpt-4o-mini", "label": "GPT-4o Mini — nhanh, chuẩn xác"},
+        {"value": "gpt-4o", "label": "GPT-4o — thông minh, văn phong mượt"},
+        {"value": "qwen2.5:7b", "label": "Qwen 2.5 7B — khuyên dùng Ollama"},
+        {"value": "qwen2.5:14b", "label": "Qwen 2.5 14B — dịch sắc thái tốt"},
+        {"value": "qwen2.5:32b", "label": "Qwen 2.5 32B — dịch xuất sắc"},
+        {"value": "deepseek-chat", "label": "DeepSeek V3 — chi tiết, tự nhiên"},
+        {"value": "llama3.1:8b", "label": "Llama 3.1 8B — phổ biến"},
+    ],
+    "transformers": [
+        {"value": "Helsinki-NLP/opus-mt-en-vi", "label": "Opus-MT En-Vi (Helsinki-NLP)"},
+        {"value": "facebook/nllb-200-distilled-600M", "label": "NLLB-200 Distilled 600M (Meta)"},
+        {"value": "vinai/vinai-translate-en2vi", "label": "VinAI Translate En-Vi"},
+    ],
+}
+
+
 @router.get("/health")
 def health() -> dict:
     return {"ok": True, "app": "AutoCC", "version": "0.1.0"}
@@ -71,6 +92,8 @@ def capabilities() -> dict:
     """What this install can actually do — never the credentials that enable it."""
 
     translation_provider = resolve_translation_provider(settings.translation_provider)
+    transformers_available = importlib.util.find_spec("transformers") is not None
+    llm_configured = bool(settings.llm_base_url.strip())
     return {
         "transcription_provider": settings.transcription_provider.lower(),
         "whisper_model": settings.whisper_model,
@@ -80,6 +103,9 @@ def capabilities() -> dict:
         "transcription_models": TRANSCRIPTION_MODELS,
         "translation_provider": translation_provider,
         "translation_model": _translation_model(translation_provider),
+        "translation_models": TRANSLATION_MODELS,
+        "transformers_available": transformers_available,
+        "llm_configured": llm_configured,
         "translation_configured": _translation_configured(translation_provider),
         "translation_styles": style_options(),
         "llm_model": settings.llm_model,

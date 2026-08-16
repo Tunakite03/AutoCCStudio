@@ -89,6 +89,8 @@ def new_job(
         "speaker_analysis_error": None,
         "speaker_analysis_report": None,
         "target_language": None,
+        "translation_provider": None,
+        "translation_model": None,
         "detected_language": None,
         "cues": [],
     }
@@ -133,6 +135,8 @@ def public_job(job: dict) -> dict:
         "speaker_analysis_error": job.get("speaker_analysis_error"),
         "speaker_analysis_report": job.get("speaker_analysis_report"),
         "target_language": job.get("target_language"),
+        "translation_provider": job.get("translation_provider"),
+        "translation_model": job.get("translation_model"),
         "translation_style": job.get("translation_style"),
         "translation_style_notes": job.get("translation_style_notes"),
         "cues": clean_cues(job.get("cues", [])),

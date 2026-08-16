@@ -871,3 +871,46 @@ def test_cors_allows_localhost_but_not_arbitrary_sites():
 
     blocked = client.get("/api/health", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_translation_provider_and_model_can_be_selected(monkeypatch):
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="custom_model.srt",
+        cues=[{"id": 1, "start": 0, "end": 1, "text": "Hello world", "translation": ""}],
+    )
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={
+                "target_language": "Tiếng Việt",
+                "provider": "mock",
+                "model": "my-custom-model",
+            },
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["translation_provider"] == "mock"
+        assert body["translation_model"] == "my-custom-model"
+
+        result = wait_for_status(job["id"], timeout=10.0)
+        assert result["status"] == "completed"
+        assert result["translation_provider"] == "mock"
+        assert result["translation_model"] == "my-custom-model"
+    finally:
+        cleanup(job["id"])
+
+
+def test_capabilities_reports_translation_models():
+    response = client.get("/api/capabilities")
+    assert response.status_code == 200
+    data = response.json()
+    assert "translation_models" in data
+    assert "openai_compatible" in data["translation_models"]
+    assert "transformers" in data["translation_models"]
+    models = [m["value"] for m in data["translation_models"]["openai_compatible"]]
+    assert "mistral-small-latest" in models
+
