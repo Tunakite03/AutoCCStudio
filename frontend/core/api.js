@@ -39,11 +39,15 @@ export const api = {
     request(`/api/jobs/${jobId}/split-long-cues`, { method: "POST" }),
 
 
-  translate: (jobId, targetLanguage) =>
+  translate: (jobId, targetLanguage, style = "auto", styleNotes = "") =>
     request(`/api/jobs/${jobId}/translate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_language: targetLanguage }),
+      body: JSON.stringify({
+        target_language: targetLanguage,
+        style,
+        style_notes: styleNotes,
+      }),
     }),
 
   saveCues: (jobId, cues) =>

@@ -1,4 +1,5 @@
 import json
+import time
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -427,6 +428,170 @@ def test_translation_preserves_dialogue_lines_and_speaker_metadata(monkeypatch):
     assert result[0]["speaker"] == 1
 
 
+def _hosted_translation(monkeypatch, completion):
+    monkeypatch.setattr(
+        ai,
+        "settings",
+        replace(
+            ai.settings,
+            translation_provider="mistral",
+            llm_base_url="http://127.0.0.1:1/v1",
+            llm_model="translate-model",
+        ),
+    )
+    monkeypatch.setattr(ai, "_llm_completion", completion)
+
+
+def _request_payload(messages):
+    """The JSON block a translation request ends with, after the instructions."""
+
+    return json.loads(messages[1]["content"].rsplit("\n\n", 1)[-1])
+
+
+def _requested_lines(messages):
+    """The source lines of one translation request, in the order they were sent."""
+
+    return [item["text"] for item in _request_payload(messages)["lines"].values()]
+
+
+def test_each_batch_sees_its_neighbours_and_the_terms_already_agreed(monkeypatch):
+    """Twenty isolated lines at a time is how a film loses its pronouns."""
+
+    seen = []
+
+    def fake_completion(messages, *, temperature, operation, model=None):
+        payload = _request_payload(messages)
+        seen.append(payload)
+        return json.dumps(
+            {
+                "translations": {
+                    key: f"VI:{item['text']}" for key, item in payload["lines"].items()
+                },
+                "glossary": {"Anna": "Anna (chị)"},
+            },
+            ensure_ascii=False,
+        )
+
+    _hosted_translation(monkeypatch, fake_completion)
+    cues = [
+        {
+            "id": index,
+            "start": index,
+            "end": index + 1,
+            "text": f"line {index}",
+            "translation": "",
+            "speaker": index % 2,
+        }
+        for index in range(1, 5)
+    ]
+
+    ai.translate_cues(cues, "Tiếng Việt", batch_size=2)
+
+    assert len(seen) == 2
+    first, second = seen
+    assert "context_before" not in first  # nothing precedes the opening lines
+    assert "glossary" not in first
+    assert [item["text"] for item in first["context_after"]] == ["line 3", "line 4"]
+    assert first["lines"]["1"]["speaker"] == 1
+    # The second batch reads what the first one actually produced, not its source.
+    assert second["context_before"][-1] == {
+        "text": "line 2",
+        "speaker": 0,
+        "translation": "VI:line 2",
+    }
+    assert second["glossary"] == {"Anna": "Anna (chị)"}
+
+
+def test_style_terms_are_pinned_into_every_batch(monkeypatch):
+    """"đại ca" is the whole point: a correct "anh cả" is the wrong subtitle."""
+
+    seen = []
+
+    def fake_completion(messages, *, temperature, operation, model=None):
+        payload = _request_payload(messages)
+        seen.append((messages[1]["content"], payload))
+        return json.dumps(
+            {
+                "translations": {
+                    key: f"VI:{item['text']}" for key, item in payload["lines"].items()
+                },
+                # The model tries to overrule the house style; it must not win.
+                "glossary": {"大哥": "anh cả", "李云": "Lý Vân"},
+            },
+            ensure_ascii=False,
+        )
+
+    _hosted_translation(monkeypatch, fake_completion)
+    cues = [
+        {"id": index, "start": index, "end": index + 1, "text": f"line {index}"}
+        for index in range(1, 5)
+    ]
+
+    ai.translate_cues(
+        cues,
+        "Tiếng Việt",
+        batch_size=2,
+        source_language="zh",
+        style="auto",
+        style_notes="陛下 → bệ hạ\nGiữ giọng cổ trang",
+    )
+
+    first_prompt, first = seen[0]
+    _second_prompt, second = seen[1]
+    assert first["glossary"]["大哥"] == "đại ca"  # seeded, not learned
+    assert first["glossary"]["陛下"] == "bệ hạ"
+    assert "Giữ giọng cổ trang" in first_prompt
+    assert "đại ca" in first_prompt  # the preset's rules ride along too
+    assert second["glossary"]["大哥"] == "đại ca"  # the model's override was refused
+    assert second["glossary"]["李云"] == "Lý Vân"  # but it can still add its own
+
+
+def test_translation_retranslates_only_the_line_the_model_merged(monkeypatch):
+    """Merging two short lines into one sentence is what models actually do to
+    subtitles; it used to fail the whole job on a length mismatch."""
+
+    calls = []
+
+    def fake_completion(messages, *, temperature, operation, model=None):
+        requested = _requested_lines(messages)
+        calls.append(requested)
+        if len(requested) > 1:
+            # "Two" was folded into the first line and its key never came back.
+            return json.dumps({"1": "Một hai", "3": "Ba"}, ensure_ascii=False)
+        return json.dumps({"1": "Hai"}, ensure_ascii=False)
+
+    _hosted_translation(monkeypatch, fake_completion)
+    cues = [
+        {"id": index, "start": index, "end": index + 1, "text": text, "translation": ""}
+        for index, text in enumerate(["One", "Two", "Three"], start=1)
+    ]
+
+    result = ai.translate_cues(cues, "Tiếng Việt", batch_size=3)
+
+    assert [cue["translation"] for cue in result] == ["Một hai", "Hai", "Ba"]
+    assert calls == [["One", "Two", "Three"], ["Two"]]
+
+
+def test_translation_reports_which_lines_the_model_never_returned(monkeypatch):
+    def fake_completion(messages, *, temperature, operation, model=None):
+        if len(_requested_lines(messages)) == 1:
+            return json.dumps({}, ensure_ascii=False)
+        return json.dumps({"1": "Một"}, ensure_ascii=False)
+
+    _hosted_translation(monkeypatch, fake_completion)
+    cues = [
+        {"id": index, "start": index, "end": index + 1, "text": text, "translation": ""}
+        for index, text in enumerate(["One", "Two"], start=1)
+    ]
+
+    try:
+        ai.translate_cues(cues, "Tiếng Việt", batch_size=2)
+    except ai.AIProviderError as error:
+        assert "dòng 2" in str(error), str(error)
+    else:
+        raise AssertionError("expected the unrepairable line to fail the batch")
+
+
 def test_dialogue_analysis_inserts_only_line_breaks(monkeypatch):
     captured = {}
 
@@ -589,8 +754,42 @@ def test_dialogue_analysis_calls_openai_compatible_endpoint(monkeypatch):
     assert '"speaker_hint": 0' in captured["payload"]["messages"][1]["content"]
 
 
-def test_json_array_parser_accepts_markdown_fence():
-    assert ai._extract_json_array('```json\n["Một", "Hai"]\n```') == ["Một", "Hai"]
+def test_llm_calls_are_paced_when_an_interval_is_configured(monkeypatch):
+    """Cheapest rate limit is the one never triggered."""
+
+    monkeypatch.setattr(
+        ai, "settings", replace(ai.settings, llm_min_interval_seconds=0.05)
+    )
+    monkeypatch.setattr(ai, "_llm_next_call_at", 0.0)
+    slept = []
+    monkeypatch.setattr(ai.time, "sleep", slept.append)
+
+    ai._wait_for_llm_slot()  # nothing to wait for yet
+    ai._wait_for_llm_slot()
+
+    assert len(slept) == 1, slept
+    assert 0.04 <= slept[0] <= 0.06, slept
+
+
+def test_llm_calls_run_flat_out_without_an_interval(monkeypatch):
+    monkeypatch.setattr(
+        ai, "settings", replace(ai.settings, llm_min_interval_seconds=0.0)
+    )
+    monkeypatch.setattr(ai, "_llm_next_call_at", time.monotonic() + 30)
+
+    started = time.monotonic()
+    ai._wait_for_llm_slot()
+
+    assert time.monotonic() - started < 1
+
+
+def test_translation_map_parser_accepts_markdown_fence_and_plain_arrays():
+    assert ai._extract_translation_map(
+        '```json\n{"1": "Một", "2": "Hai"}\n```', [1, 2]
+    ) == {1: "Một", 2: "Hai"}
+    # A bare array is positional, so it is only trusted at the exact length.
+    assert ai._extract_translation_map('["Một", "Hai"]', [1, 2]) == {1: "Một", 2: "Hai"}
+    assert ai._extract_translation_map('["Một Hai"]', [1, 2]) == {}
 
 
 def test_transformer_provider_rejects_wrong_target_language(monkeypatch):

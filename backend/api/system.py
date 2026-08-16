@@ -13,6 +13,7 @@ from ..ai import (
 )
 from ..config import settings
 from ..media import find_ffmpeg
+from ..translation_style import style_options
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -36,6 +37,21 @@ TRANSCRIPTION_MODELS = {
 @router.get("/health")
 def health() -> dict:
     return {"ok": True, "app": "AutoCC", "version": "0.1.0"}
+
+
+def _translation_model(provider: str) -> str:
+    """The model translation will actually call.
+
+    TRANSLATION_MODEL only feeds the local transformers pipeline; a hosted
+    provider translates with LLM_MODEL. Reporting the raw setting made the UI
+    show a backend name where every other row shows a model.
+    """
+
+    if provider == TRANSLATION_MOCK:
+        return TRANSLATION_MOCK
+    if provider == TRANSLATION_TRANSFORMERS:
+        return settings.translation_model
+    return settings.llm_model
 
 
 def _translation_configured(provider: str) -> bool:
@@ -63,8 +79,9 @@ def capabilities() -> dict:
         "deepgram_configured": bool(settings.deepgram_api_key.strip()),
         "transcription_models": TRANSCRIPTION_MODELS,
         "translation_provider": translation_provider,
-        "translation_model": settings.translation_model,
+        "translation_model": _translation_model(translation_provider),
         "translation_configured": _translation_configured(translation_provider),
+        "translation_styles": style_options(),
         "llm_model": settings.llm_model,
         "speaker_analysis_configured": bool(
             settings.llm_base_url.strip()

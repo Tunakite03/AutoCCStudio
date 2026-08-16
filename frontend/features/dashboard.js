@@ -92,17 +92,32 @@ function statusOf(project) {
   return { label: "Chưa dịch", tone: "idle" };
 }
 
+/* `project-card`, `thumb-mark`, `project-status` and `progress-fill` stay as
+   hooks: custom.css owns their entrance animation, icon fill swap and the
+   open/tone/complete states. Everything else is utilities. */
+const CARD =
+  "project-card flex flex-col overflow-hidden border border-line-soft rounded-md bg-panel " +
+  "transition-[border-color,transform,box-shadow] duration-[140ms] hover:border-line " +
+  "hover:-translate-y-0.5 hover:shadow-pane";
+const CARD_TOOL =
+  "tool flex items-center gap-1.5 h-6 px-2 border border-transparent rounded-sm text-text-dim text-[11px] " +
+  "whitespace-nowrap transition-[color,background-color,border-color] duration-[120ms] hover:text-text " +
+  "hover:bg-raised-hi hover:border-line";
+
 function buildCard(project) {
-  const card = element("article", "project-card");
+  const card = element("article", CARD);
   card.dataset.id = project.id;
   if (project.id === state.job?.id) card.classList.add("is-open");
 
   /* Thumbnail */
-  const media = element("button", "project-thumb");
+  const media = element(
+    "button",
+    "relative block w-full aspect-video overflow-hidden bg-void cursor-pointer",
+  );
   media.type = "button";
   media.title = "Mở project";
   if (project.video_available) {
-    const image = element("img");
+    const image = element("img", "w-full h-full object-cover block");
     image.loading = "lazy";
     image.alt = "";
     image.src = api.thumbnailUrl(project.id);
@@ -110,25 +125,34 @@ function buildCard(project) {
     image.addEventListener("error", () => image.remove(), { once: true });
     media.appendChild(image);
   }
+  const mark = "thumb-mark absolute inset-0 grid place-items-center text-[rgba(255,255,255,0.72)] pointer-events-none";
   media.insertAdjacentHTML(
     "beforeend",
     project.video_available
-      ? '<span class="thumb-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 7.5 17 12l-8 4.5Z"/></svg></span>'
-      : '<span class="thumb-mark subtitle-only" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 11h9M5 15h12"/></svg></span>',
+      ? `<span class="${mark}" aria-hidden="true"><svg class="w-[34px] h-[34px]" viewBox="0 0 24 24"><path d="M9 7.5 17 12l-8 4.5Z"/></svg></span>`
+      : `<span class="${mark} subtitle-only" aria-hidden="true"><svg class="w-[34px] h-[34px]" viewBox="0 0 24 24"><path d="M5 7h14M5 11h9M5 15h12"/></svg></span>`,
   );
   const status = statusOf(project);
-  const badge = element("span", `project-status ${status.tone}`, status.label);
+  const badge = element(
+    "span",
+    `project-status ${status.tone} absolute top-2 left-2 px-[7px] py-0.5 rounded-full ` +
+      "bg-[rgba(8,9,10,0.78)] text-text-dim text-[10px] font-semibold backdrop-blur-[6px]",
+    status.label,
+  );
   media.appendChild(badge);
   media.addEventListener("click", () => openProject(project.id));
 
   /* Body */
-  const body = element("div", "project-body");
-  // Not "project-name": the titlebar already owns that class and its nowrap rule
-  // would cancel this card's two-line clamp.
-  const title = element("h3", "card-name", project.name);
+  const body = element("div", "grid gap-[5px] px-3 pt-[11px] pb-[9px]");
+  // Two-line clamp on purpose: card titles are file names and run long.
+  const title = element(
+    "h3",
+    "overflow-hidden text-[12.5px] font-semibold leading-[1.35] text-ellipsis line-clamp-2",
+    project.name,
+  );
   title.title = project.name;
 
-  const meta = element("p", "project-meta mono");
+  const meta = element("p", "mono text-muted text-[10.5px]");
   const language = project.detected_language || project.source_language || "—";
   meta.textContent = `${project.cue_count} cue · ${formatDuration(project.duration_seconds)} · ${language}`;
 
@@ -137,33 +161,41 @@ function buildCard(project) {
   /* Translation progress — the one number that says how far the work got */
   if (project.cue_count) {
     const done = Math.round((project.translated_count / project.cue_count) * 100);
-    const bar = element("div", "progress");
+    const bar = element("div", "h-[3px] mt-[3px] overflow-hidden rounded-[2px] bg-raised-hi");
     bar.setAttribute("role", "img");
     bar.setAttribute("aria-label", `Đã dịch ${done}%`);
-    const fill = element("span", "progress-fill");
+    const fill = element("span", "progress-fill block h-full rounded-[2px] bg-accent");
     fill.style.width = `${done}%`;
     if (done === 100) fill.classList.add("is-complete");
     bar.appendChild(fill);
-    const legend = element("span", "progress-legend mono", `${done}% dịch`);
+    const legend = element("span", "mono text-faint text-[9.5px]", `${done}% dịch`);
     body.append(bar, legend);
   }
 
   /* Footer */
-  const footer = element("div", "project-foot");
+  const footer = element(
+    "div",
+    "flex items-center gap-2 mt-auto pt-2 pr-2.5 pb-[9px] pl-3 border-t border-line-soft text-faint text-[10.5px]",
+  );
   footer.append(
-    element("span", "project-time", formatRelativeTime(project.updated_at)),
-    element("span", "project-size mono", formatFileSize(project.size_bytes)),
+    element("span", "", formatRelativeTime(project.updated_at)),
+    element("span", "mono mr-auto", formatFileSize(project.size_bytes)),
   );
 
-  const actions = element("div", "project-actions");
-  const open = element("button", "tool", "Mở");
+  const actions = element("div", "flex items-center gap-[3px]");
+  const open = element("button", CARD_TOOL, "Mở");
   open.type = "button";
   open.addEventListener("click", () => openProject(project.id));
-  const remove = element("button", "tool danger icon");
+  const remove = element(
+    "button",
+    "tool danger w-6 h-6 flex items-center justify-center border border-transparent rounded-sm " +
+      "text-text-dim transition-[color,background-color,border-color] duration-[120ms] hover:bg-raised-hi",
+  );
   remove.type = "button";
   remove.title = "Xóa project";
   remove.setAttribute("aria-label", `Xóa ${project.name}`);
-  remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
+  remove.innerHTML =
+    '<svg class="w-[15px] h-[15px]" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
   remove.addEventListener("click", () => askDelete(project));
   actions.append(open, remove);
   footer.appendChild(actions);

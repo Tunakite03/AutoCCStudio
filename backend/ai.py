@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import mimetypes
 import re
+import threading
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable
@@ -17,6 +19,7 @@ from urllib.parse import urlencode
 
 from . import httpclient
 from .config import get_logger, settings
+from .translation_style import STYLE_AUTO, StyleBrief, build_style_brief
 from .media import extract_transcription_audio, media_duration_seconds
 from .subtitles import (
     balance_lines,
@@ -610,6 +613,30 @@ def _completion_url() -> str:
     return base if base.endswith("/chat/completions") else f"{base}/chat/completions"
 
 
+_llm_pace_lock = threading.Lock()
+_llm_next_call_at = 0.0
+
+
+def _wait_for_llm_slot() -> None:
+    """Keep LLM_MIN_INTERVAL_SECONDS between outbound LLM calls.
+
+    Hosted providers meter requests per second and a translation is a long burst
+    of small calls, so the cheapest rate limit is the one never triggered. The
+    sleep happens under the lock on purpose: two jobs translating at once have
+    to queue behind each other, not each keep their own pace.
+    """
+
+    interval = max(0.0, settings.llm_min_interval_seconds)
+    if not interval:
+        return
+    global _llm_next_call_at
+    with _llm_pace_lock:
+        wait = _llm_next_call_at - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _llm_next_call_at = time.monotonic() + interval
+
+
 def _llm_completion(
     messages: list[dict[str, str]],
     *,
@@ -623,6 +650,7 @@ def _llm_completion(
     if not selected_model:
         raise AIProviderError(f"Chưa cấu hình model LLM cho {operation}")
 
+    _wait_for_llm_slot()
     try:
         response = httpclient.post(
             _completion_url(),
@@ -740,15 +768,6 @@ def _extract_json_value(content: str, error_subject: str = "Model"):
         raise AIResponseFormatError(
             f"{error_subject} không trả về JSON hợp lệ"
         ) from exc
-
-
-def _extract_json_array(content: str, error_subject: str = "Model") -> list[str]:
-    value = _extract_json_value(content, error_subject)
-    if isinstance(value, dict):
-        value = value.get("translations")
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise AIResponseFormatError(f"{error_subject} phải trả về một mảng chuỗi")
-    return value
 
 
 def _clean_dialogue_layout(text: str) -> str:
@@ -1025,17 +1044,162 @@ def resolve_translation_provider(name: str) -> str:
     return TRANSLATION_OPENAI_COMPATIBLE
 
 
-def _translate_batch(texts: list[str], target_language: str) -> list[str]:
-    provider = resolve_translation_provider(settings.translation_provider)
-    if provider == TRANSLATION_MOCK:
-        return [f"[{target_language}] {text}" for text in texts]
-    if provider == TRANSLATION_TRANSFORMERS:
-        return _translate_batch_transformers(texts, target_language)
+def _extract_translation_map(content, line_ids: list[int]) -> dict[int, str]:
+    """Realign what came back with what was sent, by id.
+
+    A bare JSON array is positional, so a model that merges two short lines into
+    one sentence shifts every translation after it and the batch has to be
+    thrown away. Ids survive that merge: the swallowed line simply comes back
+    missing, and only that line needs retranslating.
+
+    Takes either the raw response text or a value already decoded from it, so a
+    reply carrying both translations and glossary updates is parsed once.
+    """
+
+    value = (
+        _extract_json_value(content, "Model dịch")
+        if isinstance(content, str)
+        else content
+    )
+    if isinstance(value, dict):
+        for key in ("translations", "results"):
+            inner = value.get(key)
+            if isinstance(inner, (dict, list)):
+                value = inner
+                break
+
+    wanted = set(line_ids)
+    results: dict[int, str] = {}
+    if isinstance(value, dict):
+        for raw_id, text in value.items():
+            try:
+                line_id = int(str(raw_id).strip())
+            except (TypeError, ValueError):
+                continue
+            if line_id in wanted and isinstance(text, str):
+                results[line_id] = text
+        return results
+
+    if isinstance(value, list):
+        if all(isinstance(item, str) for item in value):
+            # Positional, so trustworthy only when nothing was merged or dropped.
+            if len(value) == len(line_ids):
+                return dict(zip(line_ids, value))
+            if len(line_ids) == 1 and value:
+                return {line_ids[0]: value[0]}
+            return {}
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            raw_id = item.get("id", item.get("line_id", item.get("index")))
+            text = item.get("text", item.get("translation"))
+            try:
+                line_id = int(str(raw_id).strip())
+            except (TypeError, ValueError):
+                continue
+            if line_id in wanted and isinstance(text, str):
+                results[line_id] = text
+        return results
+
+    raise AIResponseFormatError("Model dịch không trả về bản dịch theo id")
+
+
+TRANSLATION_CONTEXT_BEFORE = 4
+TRANSLATION_CONTEXT_AFTER = 2
+# Enough for a cast list plus recurring terms; past that the prompt costs more
+# than the consistency is worth.
+GLOSSARY_LIMIT = 40
+GLOSSARY_TERM_LIMIT = 60
+
+
+def _line_payload(line: dict, *, with_translation: bool = False) -> dict:
+    """One subtitle line as the model sees it, with empty fields left out."""
+
+    payload = {"text": line.get("text", "")}
+    speaker = line.get("speaker")
+    if speaker is not None and str(speaker).strip() != "":
+        payload["speaker"] = speaker
+    if with_translation and str(line.get("translation", "")).strip():
+        payload["translation"] = line["translation"]
+    return payload
+
+
+def _merge_glossary(
+    glossary: dict[str, str],
+    learned,
+    pinned: frozenset[str] = frozenset(),
+) -> None:
+    """Fold this batch's terms into the running glossary, newest last.
+
+    Kept small and in insertion order on purpose: the entries that survive are
+    the ones the film keeps using, and the prompt stays a fixed size no matter
+    how long the transcript is. Pinned terms are the style's own, so the model
+    can neither redefine nor evict them.
+    """
+
+    if not isinstance(learned, dict):
+        return
+    for source, translation in learned.items():
+        term, value = str(source).strip(), str(translation).strip()
+        if not term or not value or term in pinned:
+            continue
+        if len(term) > GLOSSARY_TERM_LIMIT or len(value) > GLOSSARY_TERM_LIMIT:
+            continue
+        glossary.pop(term, None)
+        glossary[term] = value
+    for term in list(glossary):
+        if len(glossary) <= GLOSSARY_LIMIT:
+            break
+        if term not in pinned:
+            del glossary[term]
+
+
+def _translate_lines_llm(
+    lines: list[dict],
+    target_language: str,
+    *,
+    context_before: list[dict],
+    context_after: list[dict],
+    glossary: dict[str, str],
+    style_rules: tuple[str, ...] = (),
+) -> tuple[dict[int, str], dict]:
+    request: dict = {
+        "target_language": target_language,
+        "lines": {
+            str(line_id): _line_payload(line)
+            for line_id, line in enumerate(lines, start=1)
+        },
+    }
+    if glossary:
+        request["glossary"] = glossary
+    if context_before:
+        request["context_before"] = [
+            _line_payload(line, with_translation=True) for line in context_before
+        ]
+    if context_after:
+        request["context_after"] = [_line_payload(line) for line in context_after]
+
     prompt = (
-        "Bạn là biên dịch viên phụ đề. Dịch từng phần tử trong mảng JSON sang "
-        f"{target_language}. Giữ nguyên thứ tự, không gộp/tách câu, không thêm "
-        "chú thích hoặc nhãn người nói. Chỉ trả về một JSON array các chuỗi.\n\n"
-        + json.dumps(texts, ensure_ascii=False)
+        "Bạn là biên dịch viên phụ đề phim. Dịch các dòng trong `lines` sang "
+        f"{target_language}.\n"
+        "- Chỉ dịch `lines`. `context_before` (đã dịch), `context_after` và "
+        "`glossary` chỉ để hiểu mạch truyện, không dịch và không trả về.\n"
+        "- Lời thoại phải nối mạch với `context_before`: đại từ, xưng hô và cách "
+        "gọi tên phải nhất quán với những gì đã dịch trước đó.\n"
+        "- `speaker` là mã người nói; cùng mã là cùng một nhân vật, nên giữ "
+        "nguyên giọng điệu và cách xưng hô của nhân vật đó xuyên suốt.\n"
+        "- Mỗi khóa trong `lines` là một dòng phụ đề: dịch riêng từng khóa, "
+        "không gộp, không tách, không bỏ khóa nào. Một câu bị cắt qua hai dòng "
+        "thì dịch sao cho ghép lại vẫn thành câu.\n"
+        "- Không thêm nhãn người nói, không chú thích, không giải thích.\n"
+        "- Giữ nguyên tên riêng trừ khi `glossary` đã quy định cách gọi khác.\n"
+        "- Các mục đã có sẵn trong `glossary` là bắt buộc: dịch đúng như vậy, "
+        "không tự đổi sang cách gọi khác.\n"
+        + "".join(f"- {rule}\n" for rule in style_rules)
+        + "Trả về JSON: {\"translations\": {khóa: bản dịch}, \"glossary\": "
+        "{nguyên bản: cách dịch chuẩn}}. Trong `glossary` chỉ thêm tên riêng, "
+        "cách xưng hô giữa các nhân vật và thuật ngữ sẽ còn lặp lại về sau.\n\n"
+        + json.dumps(request, ensure_ascii=False)
     )
     content = _llm_completion(
         [
@@ -1048,7 +1212,129 @@ def _translate_batch(texts: list[str], target_language: str) -> list[str]:
         temperature=0.2,
         operation="dịch phụ đề",
     )
-    return _extract_json_array(content, "Model dịch")
+    value = _extract_json_value(content, "Model dịch")
+    learned = value.get("glossary") if isinstance(value, dict) else None
+    translations = _extract_translation_map(value, list(range(1, len(lines) + 1)))
+    return translations, learned
+
+
+def _missing_translation_ids(results: dict[int, str], line_ids: list[int]) -> list[int]:
+    return [
+        line_id for line_id in line_ids if not str(results.get(line_id, "")).strip()
+    ]
+
+
+def _translate_batch_llm(
+    lines: list[dict],
+    target_language: str,
+    *,
+    context_before: list[dict] = (),
+    context_after: list[dict] = (),
+    glossary: dict[str, str] | None = None,
+    style: StyleBrief | None = None,
+) -> list[str]:
+    """One request per batch, then per-line repair for whatever came back missing.
+
+    A batch that comes back one item short used to fail the entire translation.
+    Repairing it costs a few single-line calls on a bad batch and nothing at all
+    on a good one, which is the trade the old strict length check got wrong.
+
+    The repair calls carry the same context as the batch: a line retranslated in
+    isolation is exactly the disconnected line this all exists to avoid.
+    """
+
+    if not lines:
+        return []
+    line_ids = list(range(1, len(lines) + 1))
+    terms = glossary if glossary is not None else {}
+    brief = style or build_style_brief(STYLE_AUTO)
+
+    def attempt(subset: list[int], before: list[dict], after: list[dict]) -> dict[int, str]:
+        """Translate `subset` and return the results under the caller's ids."""
+
+        try:
+            partial, learned = _translate_lines_llm(
+                [lines[line_id - 1] for line_id in subset],
+                target_language,
+                context_before=before,
+                context_after=after,
+                glossary=terms,
+                style_rules=brief.rules,
+            )
+        except AIResponseFormatError as exc:
+            logger.warning("translation batch returned an unusable shape: %s", exc)
+            return {}
+        _merge_glossary(terms, learned, brief.pinned())
+        return {
+            subset[index - 1]: text
+            for index, text in partial.items()
+            if 1 <= index <= len(subset)
+        }
+
+    batch_before, batch_after = list(context_before), list(context_after)
+    results = attempt(line_ids, batch_before, batch_after)
+    missing = _missing_translation_ids(results, line_ids)
+    if missing and len(missing) == len(line_ids):
+        # Nothing usable came back at all — retry the batch once before paying
+        # for a request per line.
+        results = attempt(line_ids, batch_before, batch_after)
+        missing = _missing_translation_ids(results, line_ids)
+    for line_id in missing:
+        logger.warning("retranslating line %s of the batch on its own", line_id)
+        # The lines around it inside this batch are the nearest context there is,
+        # and by now most of them have been translated.
+        local_before = batch_before + [
+            {**lines[index - 1], "translation": results.get(index, "")}
+            for index in line_ids[: line_id - 1]
+        ]
+        local_after = lines[line_id:] + batch_after
+        results.update(
+            attempt(
+                [line_id],
+                local_before[-TRANSLATION_CONTEXT_BEFORE:],
+                local_after[:TRANSLATION_CONTEXT_AFTER],
+            )
+        )
+
+    still_missing = _missing_translation_ids(results, line_ids)
+    if still_missing:
+        shown = ", ".join(str(line_id) for line_id in still_missing[:5])
+        raise AIProviderError(
+            f"Model không dịch được {len(still_missing)}/{len(line_ids)} dòng "
+            f"trong lô (dòng {shown})"
+        )
+    return [results[line_id] for line_id in line_ids]
+
+
+def _translate_batch(
+    lines: list[dict],
+    target_language: str,
+    *,
+    context_before: list[dict] = (),
+    context_after: list[dict] = (),
+    glossary: dict[str, str] | None = None,
+    style: StyleBrief | None = None,
+) -> list[str]:
+    """Translate one batch of subtitle lines.
+
+    Context, glossary and style are only meaningful to a chat model; the mock
+    and the local sentence-pair pipeline see one line at a time either way.
+    """
+
+    texts = [str(line.get("text", "")) for line in lines]
+    provider = resolve_translation_provider(settings.translation_provider)
+    if provider == TRANSLATION_MOCK:
+        return [f"[{target_language}] {text}" for text in texts]
+    if provider == TRANSLATION_TRANSFORMERS:
+        return _translate_batch_transformers(texts, target_language)
+    return _translate_batch_llm(
+        lines,
+        target_language,
+        context_before=context_before,
+        context_after=context_after,
+        glossary=glossary,
+        style=style,
+    )
 
 
 def translate_cues(
@@ -1056,8 +1342,21 @@ def translate_cues(
     target_language: str,
     batch_size: int = 20,
     on_batch: Callable[[int, int, list[dict]], None] | None = None,
+    *,
+    source_language: str | None = None,
+    style: str = STYLE_AUTO,
+    style_notes: str = "",
 ) -> list[dict]:
     """Translate line by line, keeping dialogue breaks intact.
+
+    Each batch carries the lines around it and a glossary the model keeps
+    extending, because a film is one conversation: translated twenty isolated
+    lines at a time, pronouns lose their referent and characters change how they
+    address each other from scene to scene.
+
+    `style` (with `source_language` deciding what "auto" means) seeds that same
+    glossary with terms the model is not allowed to redefine, which is how "đại
+    ca" stays đại ca instead of becoming a correct, unwatchable "anh cả".
 
     `on_batch(done, total, cues_so_far)` fires after every batch. A long
     translation is dozens of provider calls and any one of them can fail, so the
@@ -1068,33 +1367,58 @@ def translate_cues(
     if not target_language.strip():
         raise AIProviderError("Cần chọn ngôn ngữ đích trước khi dịch")
     translated = [dict(cue) for cue in cues]
-    pending_lines: list[tuple[int, str]] = []
-    translated_lines: list[list[str]] = [[] for _cue in translated]
+    lines: list[dict] = []
     for cue_index, cue in enumerate(translated):
         cue["text"] = _clean_dialogue_layout(str(cue.get("text", "")))
         for line in cue["text"].splitlines():
             if line.strip():
-                pending_lines.append((cue_index, line.strip()))
+                lines.append(
+                    {
+                        "cue": cue_index,
+                        "text": line.strip(),
+                        "speaker": cue.get("speaker"),
+                    }
+                )
+    results: list[str] = ["" for _line in lines]
 
     def apply_translations() -> list[dict]:
-        for cue, lines in zip(translated, translated_lines):
-            cue["translation"] = "\n".join(line for line in lines if line)
+        per_cue: list[list[str]] = [[] for _cue in translated]
+        for line, value in zip(lines, results):
+            if value:
+                per_cue[line["cue"]].append(value)
+        for cue, values in zip(translated, per_cue):
+            cue["translation"] = "\n".join(values)
         return translated
 
-    total = len(pending_lines)
+    total = len(lines)
     size = max(1, int(batch_size))
+    brief = build_style_brief(style, source_language, style_notes)
+    logger.info(
+        "translating %s lines as %s (%s pinned terms)",
+        total, brief.label, len(brief.terms),
+    )
+    glossary: dict[str, str] = brief.glossary()
     for offset in range(0, total, size):
-        batch = pending_lines[offset : offset + size]
-        results = _translate_batch(
-            [text for _cue_index, text in batch], target_language.strip()
+        end = min(offset + size, total)
+        batch = lines[offset:end]
+        translations = _translate_batch(
+            batch,
+            target_language.strip(),
+            context_before=[
+                {**lines[index], "translation": results[index]}
+                for index in range(max(0, offset - TRANSLATION_CONTEXT_BEFORE), offset)
+            ],
+            context_after=lines[end : end + TRANSLATION_CONTEXT_AFTER],
+            glossary=glossary,
+            style=brief,
         )
-        if len(results) != len(batch):
+        if len(translations) != len(batch):
             raise AIProviderError(
-                f"Model trả về {len(results)} bản dịch cho {len(batch)} cue"
+                f"Model trả về {len(translations)} bản dịch cho {len(batch)} dòng"
             )
-        for (cue_index, _text), value in zip(batch, results):
-            translated_lines[cue_index].append(strip_speaker_labels(value).strip())
+        for index, value in enumerate(translations, start=offset):
+            results[index] = strip_speaker_labels(value).strip()
         if on_batch is not None:
-            on_batch(min(offset + size, total), total, apply_translations())
+            on_batch(end, total, apply_translations())
 
     return apply_translations()

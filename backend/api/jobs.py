@@ -31,8 +31,13 @@ from ..subtitles import (
     parse_subtitle,
     split_long_cues,
 )
+from ..translation_style import STYLE_AUTO, STYLES
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+# Long enough for a cast list and a page of house rules, short enough that it
+# cannot bloat every batch prompt.
+STYLE_NOTES_LIMIT = 2000
 
 
 class CueModel(BaseModel):
@@ -50,6 +55,8 @@ class CuesPayload(BaseModel):
 
 class TranslatePayload(BaseModel):
     target_language: str
+    style: str = STYLE_AUTO
+    style_notes: str = ""
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -334,6 +341,15 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
     target_language = payload.target_language.strip()
     if not target_language:
         raise HTTPException(status_code=400, detail="Thiếu ngôn ngữ đích")
+    style_notes = payload.style_notes.strip()
+    if len(style_notes) > STYLE_NOTES_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ghi chú phong cách tối đa {STYLE_NOTES_LIMIT} ký tự",
+        )
+    style = payload.style.strip().lower() or STYLE_AUTO
+    if style != STYLE_AUTO and style not in STYLES:
+        raise HTTPException(status_code=400, detail="Phong cách dịch không hợp lệ")
 
     with _claim(job_id, "Job đang xử lý") as job:
         if not job.get("cues"):
@@ -341,9 +357,21 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
         job["status"] = STATUS_PROCESSING
         job["error"] = None
         job["target_language"] = target_language
+        job["translation_style"] = style
+        job["translation_style_notes"] = style_notes
+        source_language = job.get("detected_language") or job.get("source_language")
         snapshot = public_job(job)
 
-    runner.submit(job_id, "translation", translation_task(target_language))
+    runner.submit(
+        job_id,
+        "translation",
+        translation_task(
+            target_language,
+            source_language=source_language,
+            style=style,
+            style_notes=style_notes,
+        ),
+    )
     return snapshot
 
 

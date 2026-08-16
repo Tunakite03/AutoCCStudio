@@ -133,5 +133,7 @@ def public_job(job: dict) -> dict:
         "speaker_analysis_error": job.get("speaker_analysis_error"),
         "speaker_analysis_report": job.get("speaker_analysis_report"),
         "target_language": job.get("target_language"),
+        "translation_style": job.get("translation_style"),
+        "translation_style_notes": job.get("translation_style_notes"),
         "cues": clean_cues(job.get("cues", [])),
     }

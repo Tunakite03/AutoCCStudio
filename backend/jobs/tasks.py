@@ -20,6 +20,7 @@ from .model import (
     clean_cues,
 )
 from .runner import JobContext, finish
+from ..translation_style import STYLE_AUTO
 
 logger = get_logger("jobs.tasks")
 
@@ -133,7 +134,13 @@ def _analyze(context: JobContext, cues: list[dict], language: str | None) -> Non
         finish(job)
 
 
-def translation_task(target_language: str):
+def translation_task(
+    target_language: str,
+    *,
+    source_language: str | None = None,
+    style: str = STYLE_AUTO,
+    style_notes: str = "",
+):
     def run(context: JobContext) -> None:
         job = context.read()
 
@@ -153,6 +160,11 @@ def translation_task(target_language: str):
             job.get("cues", []),
             target_language,
             on_batch=checkpoint,
+            source_language=source_language
+            or job.get("detected_language")
+            or job.get("source_language"),
+            style=style,
+            style_notes=style_notes,
         )
 
         with context.edit() as opened:

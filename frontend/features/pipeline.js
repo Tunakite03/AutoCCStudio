@@ -124,7 +124,12 @@ async function rerunTranscription() {
 export async function translate() {
   if (!hasCues()) return toast("Cần có cue trước khi dịch", "error");
   try {
-    const job = await api.translate(state.job.id, $("#target-language").value);
+    const job = await api.translate(
+      state.job.id,
+      $("#target-language").value,
+      $("#translation-style").value,
+      $("#translation-style-notes").value,
+    );
     adoptJob(job, { keepSelection: true });
     toast("Đã đưa phụ đề vào hàng đợi dịch", "success");
     watchJob(job.id);
@@ -215,8 +220,10 @@ function updateEngineChip() {
 function renderCapabilityNote(capabilities) {
   const whisper = capabilities.whisper_available ? capabilities.whisper_model : "chưa cài";
   const deepgram = capabilities.deepgram_configured ? capabilities.deepgram_model : "thiếu API key";
+  // The model, like every other row — the provider name alone said nothing
+  // about what is doing the translating.
   const translation = capabilities.translation_configured
-    ? capabilities.translation_provider
+    ? capabilities.translation_model || capabilities.translation_provider
     : `${capabilities.translation_provider} (chưa cấu hình)`;
   const speakerAnalysis = $("#speaker-analysis");
   speakerAnalysis.disabled = !capabilities.speaker_analysis_configured;
@@ -228,6 +235,38 @@ function renderCapabilityNote(capabilities) {
     `Deepgram: ${deepgram} · Whisper: ${whisper} · AI lượt thoại: ${dialogueAI} · Dịch: ${translation} · ffmpeg: ${capabilities.ffmpeg ? "OK" : "thiếu"}`;
 }
 
+/** The style presets live in the backend, so the picker is built from them. */
+function syncStyleOptions(capabilities) {
+  const options = capabilities?.translation_styles || [];
+  if (!options.length) return;
+  const select = $("#translation-style");
+  const preferred = select.value;
+  select.replaceChildren(
+    ...options.map((item) => {
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = item.label;
+      return option;
+    }),
+  );
+  if ([...select.options].some((option) => option.value === preferred)) {
+    select.value = preferred;
+  }
+}
+
+/** Show a reopened project the style it was actually translated with. */
+function restoreStyleFromJob() {
+  const job = state.job;
+  if (!job) return;
+  const select = $("#translation-style");
+  if (job.translation_style && [...select.options].some((o) => o.value === job.translation_style)) {
+    select.value = job.translation_style;
+  }
+  if (typeof job.translation_style_notes === "string") {
+    $("#translation-style-notes").value = job.translation_style_notes;
+  }
+}
+
 export async function loadCapabilities() {
   try {
     const capabilities = await api.capabilities();
@@ -237,6 +276,8 @@ export async function loadCapabilities() {
       providerSelect.value = capabilities.transcription_provider;
     }
     syncModelOptions();
+    syncStyleOptions(capabilities);
+    restoreStyleFromJob();
     renderCapabilityNote(capabilities);
   } catch {
     $("#capability-note").textContent = "Không đọc được cấu hình backend.";
@@ -280,6 +321,7 @@ export function mountPipeline() {
   $("#download-vtt").addEventListener("click", () => downloadSubtitle("translated", "vtt"));
   $("#mux-btn").addEventListener("click", muxVideo);
 
+  on("job:loaded", restoreStyleFromJob);
   onAny(["job:loaded", "cues:changed"], refreshButtons);
   on("capabilities:loaded", refreshButtons);
   refreshButtons();

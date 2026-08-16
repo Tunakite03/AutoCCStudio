@@ -15,16 +15,36 @@ const listNode = $("#cue-list");
 const emptyNode = $("#list-empty");
 let rows = [];
 
+/* Semantic names are kept as query hooks (paintRow reaches for them) and as
+   the anchors for the selected/active rules in custom.css — the look itself
+   is carried by the utilities alongside them. */
+const ROW =
+  "cue-row grid grid-cols-[26px_minmax(0,1fr)] gap-2 px-2 py-[7px] border border-transparent rounded-sm " +
+  "text-left cursor-pointer transition-[background-color,border-color] duration-[110ms] hover:bg-raised";
+const ROW_TEXT = "overflow-hidden text-[12px] leading-[1.4] text-ellipsis line-clamp-2 whitespace-pre-line";
+
 function buildRow(cue, index) {
-  const row = element("button", "cue-row");
+  const row = element("button", ROW);
   row.type = "button";
   row.dataset.index = String(index);
 
-  const number = element("span", "cue-row-index", String(index + 1).padStart(2, "0"));
-  const main = element("span", "cue-row-main");
-  const time = element("span", "cue-row-time");
-  time.append(element("span"), element("span", "dur"), element("span", "cps-tag"));
-  main.append(time, element("span", "cue-row-text"), element("span", "cue-row-translation"));
+  const number = element(
+    "span",
+    "cue-row-index mono text-faint text-[10.5px] pt-px",
+    String(index + 1).padStart(2, "0"),
+  );
+  const main = element("span", "cue-row-main min-w-0 grid gap-[3px]");
+  const time = element("span", "cue-row-time mono flex items-center gap-[7px] text-muted text-[10px]");
+  time.append(
+    element("span"),
+    element("span", "dur text-faint"),
+    element("span", "cps-tag ml-auto px-1 rounded-[3px] text-[9.5px] font-semibold"),
+  );
+  main.append(
+    time,
+    element("span", `cue-row-text ${ROW_TEXT} text-text-dim`),
+    element("span", `cue-row-translation ${ROW_TEXT} text-accent`),
+  );
   row.append(number, main);
 
   row.addEventListener("click", () => selectCue(index, { seek: true, source: "list" }));

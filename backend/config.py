@@ -40,6 +40,13 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class Settings:
     transcription_provider: str = getenv("TRANSCRIPTION_PROVIDER", "faster_whisper")
@@ -61,6 +68,10 @@ class Settings:
     llm_api_key: str = getenv("LLM_API_KEY", "")
     llm_model: str = getenv("LLM_MODEL", "qwen2.5:7b")
     llm_timeout_seconds: int = _int_env("LLM_TIMEOUT_SECONDS", 180)
+    # Seconds to keep between two LLM calls. Hosted providers meter requests per
+    # second, and a translation is a long burst of small calls; 0 leaves a local
+    # model running flat out.
+    llm_min_interval_seconds: float = _float_env("LLM_MIN_INTERVAL_SECONDS", 0.0)
     speaker_analysis_model: str = getenv("SPEAKER_ANALYSIS_MODEL", "")
     ffmpeg_binary: str = getenv("FFMPEG_BINARY", "ffmpeg")
     max_upload_mb: int = _int_env("MAX_UPLOAD_MB", 2048)
@@ -72,6 +83,9 @@ class Settings:
     # so the default trades a reload on model switch for a smaller footprint.
     whisper_model_cache: int = _int_env("WHISPER_MODEL_CACHE", 1)
     http_retries: int = _int_env("HTTP_RETRIES", 2)
+    # A rate limit needs to be waited out, not retried a couple of times, so it
+    # gets a budget of its own.
+    http_rate_limit_retries: int = _int_env("HTTP_RATE_LIMIT_RETRIES", 5)
 
     @property
     def max_upload_bytes(self) -> int:

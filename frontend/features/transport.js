@@ -163,6 +163,12 @@ function syncFrameGeometry() {
   overlay.style.setProperty("--caption-size", `${clamp(width * 0.045, 13, 30).toFixed(1)}px`);
 }
 
+/* Font size stays in CSS — it tracks the letterboxed picture through
+   --caption-size, which resizeOverlay() writes on every layout change. */
+const CAPTION_LINE =
+  "caption-line px-3 py-[3px] rounded-[4px] bg-[rgba(0,0,0,0.72)] font-semibold leading-[1.35] " +
+  "whitespace-pre-line [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]";
+
 export function renderOverlay() {
   const cue = cues()[state.activeCue];
   overlay.dataset.track = local.captionTrack;
@@ -170,9 +176,11 @@ export function renderOverlay() {
   if (!cue || local.captionTrack === "off") return;
 
   const wants = (track) => local.captionTrack === "both" || local.captionTrack === track;
-  if (wants("source") && cue.text) overlay.appendChild(element("div", "caption-line source", cue.text));
+  if (wants("source") && cue.text) {
+    overlay.appendChild(element("div", `${CAPTION_LINE} source text-white`, cue.text));
+  }
   if (wants("translation") && cue.translation) {
-    overlay.appendChild(element("div", "caption-line translated", cue.translation));
+    overlay.appendChild(element("div", `${CAPTION_LINE} translated text-[#f6d47a]`, cue.translation));
   }
 }
 

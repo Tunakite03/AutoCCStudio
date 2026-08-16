@@ -6,4 +6,5 @@ venv/
 runtime/
 .env
 .codebase-memory/
+tailwindcss.exe
 

@@ -653,11 +653,11 @@ def test_a_failed_batch_keeps_the_translations_that_already_succeeded(monkeypatc
     calls = {"n": 0}
     real_batch = ai_module._translate_batch
 
-    def flaky_batch(texts, target_language):
+    def flaky_batch(lines, target_language, **context):
         calls["n"] += 1
         if calls["n"] > 2:
             raise ai_module.AIProviderError("model đứt kết nối")
-        return real_batch(texts, target_language)
+        return real_batch(lines, target_language, **context)
 
     monkeypatch.setattr(ai_module, "_translate_batch", flaky_batch)
 
@@ -778,6 +778,56 @@ def test_a_busy_job_refuses_every_operation_that_would_race_its_worker():
         assert client.post(f"/api/jobs/{job_id}/transcribe", data={}).status_code == 409
     finally:
         cleanup(job_id)
+
+
+def test_translation_style_is_stored_on_the_job_and_survives_a_reload(monkeypatch):
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="wuxia.srt",
+        cues=[{"id": 1, "start": 0, "end": 1, "text": "大哥", "translation": ""}],
+        detected_language="zh",
+    )
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={
+                "target_language": "Tiếng Việt",
+                "style": "han_viet",
+                "style_notes": "陛下 → bệ hạ",
+            },
+        )
+        assert response.status_code == 200, response.text
+        wait_for_status(job["id"], timeout=10.0)
+        # Reopening the project has to show what it was actually translated with.
+        reloaded = client.get(f"/api/jobs/{job['id']}").json()
+        assert reloaded["translation_style"] == "han_viet"
+        assert reloaded["translation_style_notes"] == "陛下 → bệ hạ"
+    finally:
+        cleanup(job["id"])
+
+
+def test_an_unknown_style_is_refused_rather_than_silently_ignored():
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="styled.srt",
+        cues=[{"id": 1, "start": 0, "end": 1, "text": "one", "translation": ""}],
+    )
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={"target_language": "Tiếng Việt", "style": "pirate"},
+        )
+        assert response.status_code == 400
+        oversized = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={"target_language": "Tiếng Việt", "style_notes": "x" * 2001},
+        )
+        assert oversized.status_code == 400
+    finally:
+        cleanup(job["id"])
 
 
 def test_more_jobs_than_workers_all_reach_completion(monkeypatch):

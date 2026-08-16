@@ -98,8 +98,54 @@ TRANSFORMERS_DEVICE=auto
 
 Model local chỉ phù hợp với cặp ngôn ngữ mà model hỗ trợ; với nhiều ngôn ngữ hoặc giữ văn phong dài, dùng LLM-compatible provider sẽ linh hoạt hơn.
 
-Provider dịch yêu cầu model trả về JSON array đúng số lượng dòng thoại trong mỗi batch.
-Các xuống dòng giữa người nói được giữ nguyên khi dịch; timing luôn được giữ ở backend.
+Mỗi batch dịch gửi đi một object JSON có khóa là số thứ tự dòng và nhận về đúng bộ khóa
+đó, nên model gộp hai dòng ngắn thành một câu cũng không làm lệch cả batch: dòng bị thiếu
+được dịch lại riêng, chỉ khi lần lẻ đó cũng hỏng mới báo lỗi. Các xuống dòng giữa người
+nói được giữ nguyên khi dịch; timing luôn được giữ ở backend.
+
+Phim là một mạch hội thoại, nên batch không được dịch tách rời: mỗi request kèm 4 dòng
+trước (cả bản dịch vừa tạo ra) và 2 dòng sau làm ngữ cảnh chỉ-để-đọc, kèm mã người nói
+lấy từ diarization để cùng một nhân vật giữ nguyên giọng điệu và cách xưng hô. Model đồng
+thời trả về một bảng thuật ngữ (tên riêng, xưng hô giữa từng cặp nhân vật, từ lặp lại)
+được mang sang các batch sau, giới hạn 40 mục để prompt không phình theo độ dài phim. Dòng
+phải dịch lại lẻ cũng nhận đúng ngữ cảnh đó — dịch một câu trơ trọi chính là thứ cần
+tránh. Không tốn thêm lượt gọi nào, chỉ tốn thêm token đầu vào mỗi request.
+
+### Phong cách dịch
+
+Bản dịch đúng nghĩa vẫn có thể sai vibe: `大哥` nghĩa là "anh cả", nhưng khán giả phim
+Trung chờ đợi "đại ca". Ô **Phong cách** trong khối Dịch chọn bộ quy tắc đó, mặc định
+`Tự động theo ngôn ngữ nguồn` — tiếng Trung ra preset Hán Việt, tiếng Hàn giữ
+oppa/unnie/sunbae, tiếng Nhật giữ senpai và hậu tố -san/-chan, còn lại là trung tính.
+Ngoài ra có `GenZ, khẩu ngữ` và `Trang trọng` để chọn tay khi cần.
+
+Mỗi preset gồm hai phần: các quy tắc được chèn thẳng vào prompt, và một bảng thuật ngữ
+được **ghim** vào glossary ngay từ batch đầu — model được phép bổ sung thuật ngữ mới
+trong lúc dịch nhưng không được sửa hay loại bỏ mục đã ghim.
+
+Ô **Quy tắc riêng** là phần tùy biến của bạn, mỗi dòng một ý:
+
+```text
+大哥 → đại ca
+陛下 = bệ hạ
+Giọng trẻ, tránh từ Hán Việt nặng ở cảnh hiện đại
+```
+
+Dòng có `→`, `->`, `=>` hoặc `=` được đọc thành thuật ngữ ghim và **đè lên preset**; dòng
+còn lại thành một quy tắc trong prompt. Muốn trộn hai phong cách (ví dụ phim Trung nhưng
+lời thoại kiểu GenZ) thì chọn preset gần nhất rồi viết phần còn lại vào đây. Giới hạn 2000
+ký tự và 40 thuật ngữ ghim, cắt bớt preset trước khi cắt của bạn. Lựa chọn được lưu theo
+project nên mở lại thấy đúng thứ đã dùng.
+
+Preset nằm trong [backend/translation_style.py](backend/translation_style.py) — thêm ngôn
+ngữ hoặc thể loại mới chỉ là thêm một mục vào `STYLES` (và `LANGUAGE_STYLES` nếu muốn nó
+được chọn tự động).
+
+Provider hosted tính giới hạn theo requests/giây và tokens/phút. Gặp HTTP 429, app chờ
+đúng khoảng thời gian ghi trong header `Retry-After` (không có thì backoff nhân đôi, tối
+đa một phút) với ngân sách riêng `HTTP_RATE_LIMIT_RETRIES`. Nếu vẫn bị chặn thường xuyên,
+giãn nhịp gọi bằng `LLM_MIN_INTERVAL_SECONDS` — với gói free của Mistral (1 request/giây)
+đặt `1.1`. Batch nào đã dịch xong vẫn được ghi xuống đĩa trước khi lỗi xảy ra.
 
 ## Kiểm tra nhanh
 
@@ -109,7 +155,23 @@ py -3.12 -m pytest
 py -3.12 -m compileall backend
 ```
 
+## Phát triển giao diện (Tailwind CSS)
+
+Giao diện sử dụng Tailwind CSS v4 qua binary độc lập `tailwindcss.exe` (không cần Node.js/npm):
+
+- **Khi sửa giao diện (Watch mode):**
+  ```powershell
+  .\build-css.ps1 -Watch
+  ```
+- **Khi build nén (Production):**
+  ```powershell
+  .\build-css.ps1
+  ```
+- File nguồn: `frontend/input.css` (gồm `@import "tailwindcss";` và `@import "./custom.css";`).
+- File đích: `frontend/styles.css` (được load trực tiếp bởi trình duyệt).
+
 ## Kiến trúc MVP
+
 
 ```text
 frontend/index.html            shell 3 pane: inspector · stage + timeline · danh sách cue

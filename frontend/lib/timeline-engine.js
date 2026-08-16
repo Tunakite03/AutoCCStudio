@@ -149,6 +149,14 @@ export function createTimeline({
 
   /* ── Clips ────────────────────────────────────────────────── */
 
+  /* `clip-text` / `clip-handle` stay on the elements: custom.css hangs the
+     narrow-clip and hover-grip rules off them. The rest is utilities. */
+  const CLIP_TEXT =
+    "clip-text overflow-hidden text-[11px] leading-[1.3] text-ellipsis line-clamp-2 whitespace-pre-line";
+  const CLIP_HANDLE =
+    "clip-handle absolute top-0 bottom-0 w-2 cursor-ew-resize bg-transparent " +
+    "transition-[background-color] duration-[110ms]";
+
   function buildClip(cue, index) {
     const element = document.createElement("div");
     element.className = "clip";
@@ -156,34 +164,34 @@ export function createTimeline({
     element.tabIndex = -1;
 
     const body = document.createElement("div");
-    body.className = "clip-body";
+    body.className = "clip-body min-w-0 flex-1 flex flex-col gap-0.5 px-[7px] py-[5px] pointer-events-none";
 
     const meta = document.createElement("div");
-    meta.className = "clip-meta";
+    meta.className = "clip-meta mono flex items-center gap-1.5 text-faint text-[9.5px] tracking-[0.02em]";
     const number = document.createElement("span");
-    number.className = "clip-index";
+    number.className = "clip-index text-accent font-bold";
     number.textContent = String(index + 1).padStart(2, "0");
     const span = document.createElement("span");
     span.className = "clip-span";
     meta.append(number, span);
 
     const text = document.createElement("div");
-    text.className = "clip-text";
+    text.className = `${CLIP_TEXT} text-text-dim`;
 
     const translation = document.createElement("div");
-    translation.className = "clip-text clip-translation";
+    translation.className = `${CLIP_TEXT} clip-translation text-accent`;
 
     body.append(meta, text, translation);
 
     const left = document.createElement("span");
-    left.className = "clip-handle left";
+    left.className = `${CLIP_HANDLE} left-0`;
     left.dataset.mode = "trim-start";
     const right = document.createElement("span");
-    right.className = "clip-handle right";
+    right.className = `${CLIP_HANDLE} right-0`;
     right.dataset.mode = "trim-end";
 
     const severity = document.createElement("span");
-    severity.className = "clip-severity";
+    severity.className = "clip-severity absolute left-0 right-0 bottom-0 h-0.5 bg-ok";
 
     element.append(left, body, right, severity);
     element.addEventListener("pointerdown", onClipPointerDown);
@@ -276,7 +284,8 @@ export function createTimeline({
     }
     if (!snapGuide) {
       snapGuide = document.createElement("div");
-      snapGuide.className = "snap-guide";
+      snapGuide.className =
+        "snap-guide absolute left-0 top-0 bottom-0 z-[4] w-px bg-accent opacity-85 pointer-events-none";
       canvas.appendChild(snapGuide);
     }
     snapGuide.style.transform = `translateX(${timeToX(time)}px)`;
