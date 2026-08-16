@@ -806,9 +806,6 @@
   .gap-2\.5 {
     gap: calc(var(--spacing) * 2.5);
   }
-  .gap-2\.25 {
-    gap: calc(var(--spacing) * 2.25);
-  }
   .gap-3 {
     gap: calc(var(--spacing) * 3);
   }
@@ -1496,8 +1493,8 @@
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
     transition-duration: var(--tw-duration, var(--default-transition-duration));
   }
-  .transition-\[opacity\,transform\] {
-    transition-property: opacity,transform;
+  .transition-\[opacity\,translate\] {
+    transition-property: opacity,translate;
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
     transition-duration: var(--tw-duration, var(--default-transition-duration));
   }
@@ -2255,7 +2252,7 @@ svg path.solid {
 }
 .toast.visible {
   opacity: 1;
-  transform: translateY(0);
+  translate: none;
 }
 .toast[data-kind="success"] {
   border-left-color: var(--color-ok);

@@ -718,9 +718,11 @@ svg path.solid {
   }
 }
 
+/* The resting offset comes from `translate-y-1.5`, which sets the `translate`
+   property — clearing `transform` here would leave the toast 6px low. */
 .toast.visible {
   opacity: 1;
-  transform: translateY(0);
+  translate: none;
 }
 
 .toast[data-kind="success"] {
