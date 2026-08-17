@@ -23,6 +23,7 @@ from ..jobs import JobConflict, runner, store
 from ..jobs.model import (
     KIND_SUBTITLE_IMPORT,
     KIND_TRANSCRIPTION,
+    STATUS_CANCELLED,
     STATUS_COMPLETED,
     STATUS_ERROR,
     STATUS_PROCESSING,
@@ -64,6 +65,9 @@ class TranslatePayload(BaseModel):
     style_notes: str = ""
     provider: str = ""
     model: str = ""
+    # 0-based; cues before it keep the translation they already have. 0 is both
+    # "start at the beginning" and "translate everything", which is the same run.
+    from_cue: int = 0
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -224,6 +228,7 @@ def _start_transcription_fields(
 ) -> None:
     job["status"] = STATUS_PROCESSING
     job["error"] = None
+    job["cancel_requested"] = False
     job["cues"] = []
     job["source_language"] = _normalise_language(source_language)
     job["transcription_provider"] = provider
@@ -368,6 +373,7 @@ def start_speaker_analysis(job_id: str) -> dict:
             raise HTTPException(status_code=400, detail="Job chưa có cue để phân tích")
         job["status"] = STATUS_PROCESSING
         job["error"] = None
+        job["cancel_requested"] = False
         job["speaker_analysis_requested"] = True
         job["speaker_analysis_status"] = "pending"
         job["speaker_analysis_error"] = None
@@ -397,11 +403,19 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
         payload.provider, payload.model
     )
 
+    if payload.from_cue < 0:
+        raise HTTPException(status_code=400, detail="Vị trí cue bắt đầu không hợp lệ")
+
     with _claim(job_id, "Job đang xử lý") as job:
         if not job.get("cues"):
             raise HTTPException(status_code=400, detail="Job chưa có cue để dịch")
+        if payload.from_cue >= len(job["cues"]):
+            raise HTTPException(
+                status_code=400, detail="Không còn cue nào từ vị trí đó trở đi"
+            )
         job["status"] = STATUS_PROCESSING
         job["error"] = None
+        job["cancel_requested"] = False
         job["target_language"] = target_language
         job["translation_provider"] = resolved_provider
         job["translation_model"] = selected_model
@@ -420,9 +434,28 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
             style_notes=style_notes,
             provider=resolved_provider,
             model=selected_model,
+            from_cue=payload.from_cue,
         ),
     )
     return snapshot
+
+
+@router.post("/{job_id}/cancel")
+def cancel_job(job_id: str) -> dict:
+    """Ask the running worker to stop at its next checkpoint.
+
+    Only ever a request. A worker is a thread that cannot be interrupted from
+    outside, and a provider call already in flight (Deepgram sends one request
+    for the whole video) has to come back before anything is noticed — the job
+    stays `processing` with the flag raised until then, which is exactly the
+    "đang dừng…" the UI shows.
+    """
+
+    with store.edit(job_id) as job:
+        if job.get("status") != STATUS_PROCESSING:
+            raise JobConflict("Job không còn chạy")
+        job["cancel_requested"] = True
+        return public_job(job)
 
 
 @router.put("/{job_id}/cues")
@@ -448,7 +481,9 @@ def update_cues(job_id: str, payload: CuesPayload) -> dict:
     # completion, so refuse the edit rather than silently discard it later.
     with _claim(job_id, "Job đang xử lý, không thể sửa cue") as job:
         job["cues"] = cues
-        if job["status"] == STATUS_ERROR:
+        if job["status"] in {STATUS_ERROR, STATUS_CANCELLED}:
+            # The user has taken the cues in hand; the project is theirs again,
+            # not a run that ended badly.
             job["status"] = STATUS_COMPLETED
             job["error"] = None
         return public_job(job)

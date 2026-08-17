@@ -18,14 +18,23 @@ from typing import Callable
 from urllib.parse import urlencode
 
 from . import httpclient
+from .apikeys import CredentialPool
+from .cancellation import OperationCancelled
 from .config import get_logger, settings
 from .translation_style import STYLE_AUTO, StyleBrief, build_style_brief
 from .media import extract_transcription_audio, media_duration_seconds
 from .subtitles import (
+    CJK_CLAUSE_ENDERS,
+    CJK_SENTENCE_ENDERS,
+    CueStyle,
     balance_lines,
+    enforce_cue_timing,
+    join_tokens,
+    merge_short_cues,
     split_long_cue,
     split_long_cues,
     strip_speaker_labels,
+    style_for_text,
 )
 
 
@@ -67,28 +76,58 @@ def _is_sentence_ender(token: str) -> bool:
         if re.search(r"\d\.\d+$", token):
             return False
         return True
-    return any(token.endswith(c) for c in ("。", "？", "！"))
+    return token[-1] in set(CJK_SENTENCE_ENDERS)
 
 
 def _is_clause_ender(token: str) -> bool:
     token = token.strip()
-    return bool(token and token[-1] in {",", ";", ":", "—", "–"})
+    if not token:
+        return False
+    return token[-1] in ({",", ";", ":", "—", "–"} | set(CJK_CLAUSE_ENDERS))
+
+
+def _record_token(record: dict) -> str:
+    return str(record.get("token") or record.get("raw_word") or "").strip()
+
+
+def _records_style(records: list[dict]) -> CueStyle:
+    """Pick the reading budget from a sample of what was actually recognised."""
+
+    return style_for_text(join_tokens(_record_token(record) for record in records[:400]))
 
 
 def _segment_words_into_cues(
     records: list[dict],
     media_duration: float | None = None,
-    max_chars: int = 75,
-    max_duration: float = 6.0,
-    min_split_chars: int = 24,
-    min_split_duration: float = 1.2,
+    style: CueStyle | None = None,
 ) -> list[dict]:
-    """Segment a sequence of word records into subtitle cues bounded by 1-2 lines, length & duration."""
+    """Segment word records into cues that are readable at their own length.
+
+    Three passes, because one is not enough. The split pass cuts on the best
+    boundary it can reach before the budget runs out; the merge pass puts back
+    together the fragments a recogniser handed over pre-chopped; the timing pass
+    gives whatever is left a duration a human can actually read. Doing only the
+    first — which is what this used to do — produces exactly the transcript that
+    prompted the rewrite: half-sentence cues on screen for 0.6 seconds.
+
+    The budget comes from the script: 42 characters of English and 42 characters
+    of Chinese are not the same subtitle.
+    """
+
     if not records:
         return []
 
+    active = style or _records_style(records)
+
     cues: list[dict] = []
     current_words: list[dict] = []
+    # break_scores[i] rates the boundary *after* current_words[i]: how natural a
+    # place it is to end a cue. Filled in as the next word arrives, because the
+    # silence after a word is only known once there is a next word.
+    break_scores: list[float] = []
+
+    def group_text(words: list[dict]) -> str:
+        return join_tokens(_record_token(word) for word in words)
 
     def flush_group(words: list[dict]):
         if not words:
@@ -101,12 +140,14 @@ def _segment_words_into_cues(
         if end <= start:
             return
 
-        raw_text = " ".join(str(w.get("token") or w.get("raw_word") or "").strip() for w in words)
-        clean_text = balance_lines(raw_text, max_line_len=40, max_lines=2)
+        clean_text = balance_lines(
+            group_text(words),
+            max_line_len=active.max_line_chars,
+            max_lines=active.max_lines,
+        )
         if not clean_text:
             return
 
-        speaker = words[0].get("speaker")
         cues.append(
             {
                 "id": len(cues) + 1,
@@ -114,22 +155,50 @@ def _segment_words_into_cues(
                 "end": round(end, 3),
                 "text": clean_text,
                 "translation": "",
-                "speaker": speaker,
+                "speaker": words[0].get("speaker"),
             }
         )
+
+    def best_break_index() -> int | None:
+        """The nicest boundary inside the current group that can carry a cue.
+
+        Without this, an overflowing group is cut wherever the budget happens to
+        run out — mid-phrase, and in Chinese mid-word. Reaching back to the
+        pause or the comma a few syllables earlier costs nothing and is the
+        difference between a cue that reads and one that does not.
+        """
+
+        group_start = float(current_words[0]["start"])
+        best_index: int | None = None
+        best_score = 0.0
+        for index in range(len(current_words) - 1):
+            left = current_words[: index + 1]
+            left_text = group_text(left)
+            left_duration = float(left[-1]["end"]) - group_start
+            if active.too_short(left_text, left_duration):
+                continue
+            if not active.fits(left_text, left_duration):
+                # Every later index is longer still, so nothing beyond fits.
+                break
+            # Nudge towards the last usable boundary so cues stay full.
+            score = break_scores[index] + (index / len(current_words)) * 5
+            if score > best_score:
+                best_score, best_index = score, index
+        # A score this low means no real boundary was found, only the positional
+        # nudge — in that case the caller's own cut point is no worse.
+        return best_index if best_score >= 10 else None
 
     for word in records:
         if not current_words:
             current_words.append(word)
+            break_scores.append(0.0)
             continue
 
         prev_word = current_words[-1]
         group_start = float(current_words[0]["start"])
         group_end = float(prev_word["end"])
         group_duration = group_end - group_start
-        group_len = sum(len(w.get("token", "")) for w in current_words) + len(current_words) - 1
 
-        curr_token = str(word.get("token") or word.get("raw_word") or "").strip()
         curr_start = float(word.get("start", group_end))
         curr_end = float(word.get("end", curr_start))
 
@@ -140,39 +209,58 @@ def _segment_words_into_cues(
             and word["speaker"] != prev_word["speaker"]
         )
 
-        prev_token = str(prev_word.get("token") or prev_word.get("raw_word") or "").strip()
+        prev_token = _record_token(prev_word)
         prev_is_sentence = _is_sentence_ender(prev_token)
         prev_is_clause = _is_clause_ender(prev_token)
 
-        projected_len = group_len + 1 + len(curr_token)
+        # Now that the following word is known, rate the boundary behind it.
+        break_scores[-1] = (
+            (100.0 if prev_is_sentence else 60.0 if prev_is_clause else 0.0)
+            + min(silence_gap, 1.0) * 40.0
+        )
+
+        projected_len = len(group_text(current_words + [word]))
         projected_duration = curr_end - group_start
+        # Splitting a group that is already below the floor only creates two
+        # unreadable cues instead of one, so a soft boundary has to wait.
+        group_is_fragment = active.too_short(group_text(current_words), group_duration)
+        overflows = projected_len > active.max_chars or projected_duration > active.max_duration
 
-        should_split = False
-
-        if speaker_changed:
+        if speaker_changed or overflows:
             should_split = True
-        elif silence_gap >= 0.7:
+        elif silence_gap >= active.split_gap and not group_is_fragment:
             should_split = True
-        elif prev_is_sentence and (
-            group_len >= min_split_chars
-            or group_duration >= min_split_duration
-            or projected_len > max_chars
-            or projected_duration > max_duration
+        elif prev_is_sentence and not group_is_fragment:
+            should_split = True
+        elif prev_is_clause and not group_is_fragment and (
+            projected_len > active.max_chars * 0.75
+            or projected_duration > active.max_duration * 0.75
         ):
             should_split = True
-        elif projected_len > max_chars or projected_duration > max_duration:
-            should_split = True
-        elif prev_is_clause and (group_len >= 45 or group_duration >= 4.5):
-            should_split = True
-
-        if should_split:
-            flush_group(current_words)
-            current_words = [word]
         else:
+            should_split = False
+
+        if not should_split:
             current_words.append(word)
+            break_scores.append(0.0)
+            continue
+
+        # A budget overflow has no opinion about where the sentence breaks, so
+        # it defers to the best boundary already passed. A speaker change does.
+        cut = None if speaker_changed else best_break_index() if overflows else None
+        if cut is None:
+            flush_group(current_words)
+            current_words, break_scores = [word], [0.0]
+        else:
+            flush_group(current_words[: cut + 1])
+            current_words = current_words[cut + 1 :] + [word]
+            break_scores = break_scores[cut + 1 :] + [0.0]
 
     if current_words:
         flush_group(current_words)
+
+    cues = merge_short_cues(cues, style=active)
+    cues = enforce_cue_timing(cues, style=active, media_duration=media_duration)
 
     for index, cue in enumerate(cues, start=1):
         cue["id"] = index
@@ -228,6 +316,19 @@ def transcribe_video(
                 beam_size=5,
             )
         cues = []
+        # Words are pooled across segments rather than segmented one segment at
+        # a time: a Whisper segment boundary is a decoding artefact, and cutting
+        # there means a two-word segment can never rejoin the sentence it
+        # belongs to.
+        pending_records: list[dict] = []
+
+        def flush_records():
+            if pending_records:
+                cues.extend(
+                    _segment_words_into_cues(pending_records, media_duration=media_duration)
+                )
+                pending_records.clear()
+
         for segment in segments:
             text = segment.text.strip()
             if not text:
@@ -250,8 +351,8 @@ def transcribe_video(
             )
 
             words = getattr(segment, "words", None)
+            records = []
             if words:
-                records = []
                 for w in words:
                     token = getattr(w, "word", "").strip()
                     if not token:
@@ -268,11 +369,12 @@ def transcribe_video(
                             "confidence": _optional_confidence(getattr(w, "probability", None)),
                         }
                     )
-                if records:
-                    sub_cues = _segment_words_into_cues(records, media_duration=media_duration)
-                    cues.extend(sub_cues)
-                    continue
+            if records:
+                pending_records.extend(records)
+                continue
 
+            # No word timings for this segment, so it cannot join the pool.
+            flush_records()
             cue_item = {
                 "id": 0,
                 "start": round(start, 3),
@@ -280,10 +382,16 @@ def transcribe_video(
                 "text": text,
                 "translation": "",
             }
-            cues.extend(split_long_cue(cue_item, max_chars=75, max_duration=6.0, max_lines=2))
+            cues.extend(split_long_cue(cue_item))
+
+        flush_records()
 
         for index, cue in enumerate(cues, start=1):
             cue["id"] = index
+    except OperationCancelled:
+        # `on_progress` stops the run from inside the decoding loop. That is not
+        # a Whisper failure and must not be relabelled as one.
+        raise
     except Exception as exc:  # provider errors vary by media/model backend
         raise AIProviderError(f"Whisper không thể xử lý video: {exc}") from exc
     return cues, getattr(info, "language", None)
@@ -508,6 +616,23 @@ def _deepgram_cues(payload: dict, media_duration: float | None) -> list[dict]:
         raise AIProviderError("Deepgram response có utterances không hợp lệ")
 
     cues: list[dict] = []
+    # Deepgram ends an utterance at a pause *or* at a smart-formatted sentence
+    # end, and for Chinese that lands on almost every clause. Segmenting each
+    # utterance on its own therefore froze those cuts in place: "看清楚" and
+    # "了吧" could never become one cue however short they were. Pooling the
+    # words first lets the segmenter judge the whole timeline, and the speaker
+    # id on each word still keeps two people apart.
+    pending_records: list[dict] = []
+
+    def flush_records():
+        if not pending_records:
+            return
+        sub_cues = _segment_words_into_cues(pending_records, media_duration=media_duration)
+        for sub_cue in sub_cues:
+            sub_cue["speaker_analysis_source"] = "deepgram_words"
+        cues.extend(sub_cues)
+        pending_records.clear()
+
     for utterance in utterances:
         if not isinstance(utterance, dict):
             continue
@@ -528,8 +653,8 @@ def _deepgram_cues(payload: dict, media_duration: float | None) -> list[dict]:
         words = utterance.get("words")
         speaker_id = _optional_speaker_id(utterance.get("speaker"))
 
+        records = []
         if isinstance(words, list) and words:
-            records = []
             previous_speaker = speaker_id
             for word in words:
                 if not isinstance(word, dict):
@@ -554,13 +679,13 @@ def _deepgram_cues(payload: dict, media_duration: float | None) -> list[dict]:
                         "confidence": _optional_confidence(word.get("speaker_confidence")),
                     }
                 )
-            if records:
-                sub_cues = _segment_words_into_cues(records, media_duration=media_duration)
-                for sc in sub_cues:
-                    sc["speaker_analysis_source"] = "deepgram_words"
-                cues.extend(sub_cues)
-                continue
+        if records:
+            pending_records.extend(records)
+            continue
 
+        # An utterance without word timings has no place in the pool, so
+        # whatever is pooled has to be emitted before it to keep cues in order.
+        flush_records()
         cue_item = {
             "id": 0,
             "start": round(start, 3),
@@ -570,8 +695,9 @@ def _deepgram_cues(payload: dict, media_duration: float | None) -> list[dict]:
             "speaker": speaker_id,
             "speaker_analysis_source": "deepgram_utterance",
         }
-        sub_cues = split_long_cue(cue_item, max_chars=75, max_duration=6.0, max_lines=2)
-        cues.extend(sub_cues)
+        cues.extend(split_long_cue(cue_item))
+
+    flush_records()
 
     for index, cue in enumerate(cues, start=1):
         cue["id"] = index
@@ -616,6 +742,29 @@ def _completion_url() -> str:
 _llm_pace_lock = threading.Lock()
 _llm_next_call_at = 0.0
 
+_llm_pool_lock = threading.Lock()
+_llm_pool: tuple[tuple[str, ...], CredentialPool] | None = None
+
+
+def _llm_credentials() -> CredentialPool | None:
+    """The shared key pool for the configured LLM keys, or None if there are none.
+
+    Shared, and rebuilt only when the configured keys themselves change: the
+    cooldowns are the whole value here. A pool created per call would forget
+    which key was just rate limited and hand it straight back — the first batch
+    of the next cue would walk into the same 429.
+    """
+
+    keys = settings.llm_api_keys
+    if not keys:
+        return None
+    global _llm_pool
+    with _llm_pool_lock:
+        if _llm_pool is None or _llm_pool[0] != keys:
+            logger.info("LLM key pool: %s key(s) configured", len(keys))
+            _llm_pool = (keys, CredentialPool(keys))
+        return _llm_pool[1]
+
 
 def _wait_for_llm_slot() -> None:
     """Keep LLM_MIN_INTERVAL_SECONDS between outbound LLM calls.
@@ -654,14 +803,11 @@ def _llm_completion(
     try:
         response = httpclient.post(
             _completion_url(),
-            headers={
-                "Content-Type": "application/json",
-                **(
-                    {"Authorization": f"Bearer {settings.llm_api_key}"}
-                    if settings.llm_api_key
-                    else {}
-                ),
-            },
+            headers={"Content-Type": "application/json"},
+            # The pool authorises each attempt: which key goes out is decided
+            # per request, because a retry after a 429 must not reuse the key
+            # that was just told to slow down.
+            credentials=_llm_credentials(),
             json_body={
                 "model": selected_model,
                 "temperature": temperature,
@@ -1354,6 +1500,38 @@ def _translate_batch(
     )
 
 
+def _seed_translated_lines(
+    cues: list[dict],
+    lines: list[dict],
+    results: list[str],
+    resume_at: int,
+) -> None:
+    """Fill `results` with the translation the skipped cues already carry.
+
+    Two reasons it cannot be skipped: the resumed batches quote these lines back
+    to the model as context, and every cue is rebuilt from `results` at the end
+    — an unseeded prefix would silently erase the work being resumed from.
+    """
+
+    owned: dict[int, list[int]] = {}
+    for index, line in enumerate(lines):
+        if line["cue"] < resume_at:
+            owned.setdefault(line["cue"], []).append(index)
+
+    for cue_index, indexes in owned.items():
+        existing = [
+            value
+            for value in str(cues[cue_index].get("translation", "")).splitlines()
+            if value.strip()
+        ]
+        if len(existing) != len(indexes):
+            # Hand-edited into a different number of lines. Keeping it whole on
+            # the first line loses the layout; dropping it would lose the work.
+            existing = ["\n".join(existing)] + [""] * (len(indexes) - 1)
+        for index, value in zip(indexes, existing):
+            results[index] = value.strip()
+
+
 def translate_cues(
     cues: list[dict],
     target_language: str,
@@ -1365,6 +1543,7 @@ def translate_cues(
     style_notes: str = "",
     provider: str | None = None,
     model: str | None = None,
+    from_cue: int = 0,
 ) -> list[dict]:
     """Translate line by line, keeping dialogue breaks intact.
 
@@ -1381,6 +1560,10 @@ def translate_cues(
     translation is dozens of provider calls and any one of them can fail, so the
     caller uses this both to report progress and to checkpoint what is already
     translated — a failure at batch 40 should not throw away batches 1-39.
+
+    `from_cue` resumes: cues before that index keep the translation they already
+    carry and are only re-read as context, so a run that was stopped (or a scene
+    the user wants re-done) costs the provider calls it actually needs.
     """
 
     if not target_language.strip():
@@ -1399,25 +1582,33 @@ def translate_cues(
                     }
                 )
     results: list[str] = ["" for _line in lines]
+    resume_at = max(0, int(from_cue))
+    if resume_at:
+        _seed_translated_lines(translated, lines, results, resume_at)
 
     def apply_translations() -> list[dict]:
         per_cue: list[list[str]] = [[] for _cue in translated]
         for line, value in zip(lines, results):
             if value:
                 per_cue[line["cue"]].append(value)
-        for cue, values in zip(translated, per_cue):
+        for cue_index, (cue, values) in enumerate(zip(translated, per_cue)):
+            if not values and cue_index < resume_at:
+                # Nothing of ours belongs to this cue (blank source text), and
+                # it is behind the resume point — leave its translation alone.
+                continue
             cue["translation"] = "\n".join(values)
         return translated
 
     total = len(lines)
     size = max(1, int(batch_size))
+    start = next((index for index, line in enumerate(lines) if line["cue"] >= resume_at), total)
     brief = build_style_brief(style, source_language, style_notes)
     logger.info(
-        "translating %s lines as %s (%s pinned terms)",
-        total, brief.label, len(brief.terms),
+        "translating %s of %s lines as %s (%s pinned terms)",
+        total - start, total, brief.label, len(brief.terms),
     )
     glossary: dict[str, str] = brief.glossary()
-    for offset in range(0, total, size):
+    for offset in range(start, total, size):
         end = min(offset + size, total)
         batch = lines[offset:end]
         translations = _translate_batch(

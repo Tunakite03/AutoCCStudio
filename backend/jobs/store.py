@@ -126,6 +126,16 @@ class JobStore:
             job = self._load(job_id)
             return {**job, "cues": [dict(cue) for cue in job.get("cues", [])]}
 
+    def cancel_requested(self, job_id: str) -> bool:
+        """Read the stop flag alone.
+
+        Not an `edit`: opening one would bump the revision and publish a
+        snapshot, and a worker polling between phases has nothing to report.
+        """
+
+        with self._lock_for(job_id):
+            return bool(self._load(job_id).get("cancel_requested"))
+
     def exists(self, job_id: str) -> bool:
         try:
             self.get(job_id)

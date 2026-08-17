@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..ai import analyze_dialogue_turns, transcribe_video, translate_cues
+from ..cancellation import OperationCancelled
 from ..config import get_logger
 from .model import (
     PHASE_ANALYZING,
@@ -84,6 +85,9 @@ def transcription_task(
             job["speaker_analysis_status"] = "processing"
             job["speaker_analysis_error"] = None
 
+        # Checked after the cues are safely written, never before: a stop must
+        # cost the user the optional pass, not the transcript it was refining.
+        context.raise_if_cancelled()
         _analyze(context, cues, detected_language or language)
 
     return run
@@ -92,6 +96,7 @@ def transcription_task(
 def speaker_analysis_task():
     def run(context: JobContext) -> None:
         job = context.read()
+        context.raise_if_cancelled()
         with context.edit() as opened:
             opened["speaker_analysis_status"] = "processing"
             opened["speaker_analysis_error"] = None
@@ -118,6 +123,10 @@ def _analyze(context: JobContext, cues: list[dict], language: str | None) -> Non
             return_report=True,
             on_progress=_phase_reporter(context, PHASE_ANALYZING),
         )
+    except OperationCancelled:
+        # A stop is not an analysis failure: the runner settles the job, and the
+        # cues stay exactly as the transcription left them.
+        raise
     except Exception as exc:
         logger.exception("job %s: speaker analysis failed", context.job_id)
         from .runner import describe_error
@@ -142,9 +151,11 @@ def translation_task(
     style_notes: str = "",
     provider: str | None = None,
     model: str | None = None,
+    from_cue: int = 0,
 ):
     def run(context: JobContext) -> None:
         job = context.read()
+        context.raise_if_cancelled()
 
         def checkpoint(done: int, total: int, cues_so_far: list[dict]) -> None:
             # Persisted, not just published: if a later batch fails, everything
@@ -169,6 +180,7 @@ def translation_task(
             style_notes=style_notes,
             provider=provider or job.get("translation_provider"),
             model=model or job.get("translation_model"),
+            from_cue=from_cue,
         )
 
         with context.edit() as opened:

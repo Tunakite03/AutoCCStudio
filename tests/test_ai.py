@@ -7,7 +7,43 @@ from threading import Thread
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 import backend.ai as ai
+import backend.subtitles as subtitles
+from backend.cancellation import OperationCancelled
+
+
+def test_a_stop_inside_the_decoding_loop_is_not_relabelled_a_whisper_failure(monkeypatch):
+    """`transcribe_video` turns anything the backend throws into an
+    AIProviderError. A stop travels the same path and must come out unchanged,
+    or the job would be filed as broken instead of stopped."""
+
+    class FakeModel:
+        def transcribe(self, *_args, **_kwargs):
+            return iter(
+                [
+                    SimpleNamespace(start=0.0, end=1.0, text=" one "),
+                    SimpleNamespace(start=1.0, end=2.0, text=" two "),
+                ]
+            ), SimpleNamespace(language="en")
+
+    monkeypatch.setattr(ai, "_whisper_model", lambda *_args: FakeModel())
+    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 2.0)
+
+    reports = {"n": 0}
+
+    def stop_once_decoding_starts(*_args):
+        reports["n"] += 1
+        if reports["n"] > 1:  # the first report fires before the loop
+            raise OperationCancelled("job")
+
+    with pytest.raises(OperationCancelled):
+        ai.transcribe_video(
+            Path("test.mp4"),
+            provider="faster_whisper",
+            on_progress=stop_once_decoding_starts,
+        )
 
 
 def test_transcription_clamps_segments_to_media_duration(monkeypatch):
@@ -754,6 +790,108 @@ def test_dialogue_analysis_calls_openai_compatible_endpoint(monkeypatch):
     assert '"speaker_hint": 0' in captured["payload"]["messages"][1]["content"]
 
 
+def _rotating_llm_stub(seen, limited_keys):
+    """An OpenAI-compatible stub that rate limits the keys it is told to."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", "0"))
+            self.rfile.read(length)
+            key = (self.headers.get("Authorization") or "").removeprefix("Bearer ")
+            seen.append(key)
+            if key in limited_keys:
+                status, body = 429, b'{"error":{"message":"rate limit exceeded"}}'
+            else:
+                status = 200
+                body = json.dumps(
+                    {"choices": [{"message": {"content": "xong"}}]}
+                ).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def shutdown():
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    return server.server_port, shutdown
+
+
+def test_the_llm_rotates_its_keys_and_remembers_which_one_is_cooling(monkeypatch):
+    """The pool has to outlive a single call: a limit learned while translating
+    cue 1 is only worth anything if cue 2 still knows about it."""
+
+    seen = []
+    port, shutdown = _rotating_llm_stub(seen, limited_keys={"key-1"})
+    monkeypatch.setattr(ai, "_llm_pool", None)
+    monkeypatch.setattr(
+        ai,
+        "settings",
+        replace(
+            ai.settings,
+            llm_base_url=f"http://127.0.0.1:{port}/v1",
+            llm_api_key="[key-1, key-2]",
+            llm_model="rotating-model",
+        ),
+    )
+    message = [{"role": "user", "content": "dịch đi"}]
+
+    try:
+        assert ai._llm_completion(message, temperature=0.0, operation="thử") == "xong"
+        assert ai._llm_completion(message, temperature=0.0, operation="thử") == "xong"
+        assert ai._llm_credentials() is ai._llm_credentials(), "one shared pool"
+    finally:
+        shutdown()
+
+    # First call rotates off the limited key; the second does not pay for it again.
+    assert seen == ["key-1", "key-2", "key-2"]
+
+
+def test_a_job_stops_with_a_readable_error_when_every_key_is_limited(monkeypatch):
+    seen = []
+    port, shutdown = _rotating_llm_stub(seen, limited_keys={"key-1", "key-2"})
+    monkeypatch.setattr(ai, "_llm_pool", None)
+    monkeypatch.setattr(
+        ai,
+        "settings",
+        replace(
+            ai.settings,
+            llm_base_url=f"http://127.0.0.1:{port}/v1",
+            llm_api_key="[key-1, key-2]",
+            llm_model="rotating-model",
+        ),
+    )
+    monkeypatch.setattr(
+        ai.httpclient,
+        "settings",
+        replace(ai.httpclient.settings, http_rate_limit_retries=0),
+    )
+
+    try:
+        with pytest.raises(ai.AIProviderError) as error:
+            ai._llm_completion(
+                [{"role": "user", "content": "dịch đi"}],
+                temperature=0.0,
+                operation="dịch",
+            )
+    finally:
+        shutdown()
+
+    assert "Cả 2 API key" in str(error.value)
+    assert "khi dịch" in str(error.value)
+    assert sorted(seen) == ["key-1", "key-2"], "each key was given its turn"
+
+
 def test_llm_calls_are_paced_when_an_interval_is_configured(monkeypatch):
     """Cheapest rate limit is the one never triggered."""
 
@@ -825,3 +963,130 @@ def test_translate_cues_forwards_custom_model(monkeypatch):
 
     assert called_models == ["custom-gpt-model"]
     assert result[0]["translation"] == "Xin chào"
+
+
+# ── Chinese segmentation ─────────────────────────────────────────────
+
+
+def _zh_utterance(text, start, end, speaker=0):
+    """Deepgram's shape for a Chinese utterance, one word per glyph."""
+
+    step = (end - start) / max(1, len(text))
+    return {
+        "start": start,
+        "end": end,
+        "speaker": speaker,
+        "transcript": text,
+        "words": [
+            {
+                "word": glyph,
+                "punctuated_word": glyph,
+                "start": round(start + index * step, 3),
+                "end": round(start + (index + 1) * step, 3),
+                "speaker": speaker,
+                "speaker_confidence": 0.9,
+            }
+            for index, glyph in enumerate(text)
+        ],
+    }
+
+
+def test_deepgram_joins_fragments_split_across_utterances():
+    """Deepgram ends a Chinese utterance at almost every clause, so the halves
+    of one sentence arrive as two utterances and used to stay two cues."""
+
+    payload = {
+        "results": {
+            "utterances": [
+                _zh_utterance("看清楚", 91.3, 92.1),
+                _zh_utterance("了吧", 92.1, 92.9),
+            ]
+        }
+    }
+
+    cues = ai._deepgram_cues(payload, media_duration=200.0)
+
+    assert len(cues) == 1
+    assert cues[0]["text"] == "看清楚了吧"
+    assert cues[0]["start"] == 91.3
+    assert cues[0]["end"] == 92.9
+
+
+def test_deepgram_chinese_cues_are_readable_at_their_own_length():
+    payload = {
+        "results": {
+            "utterances": [
+                _zh_utterance("看清楚", 91.3, 92.1),
+                _zh_utterance("了吧", 92.1, 92.9),
+                _zh_utterance("不管这香炉怎么", 93.78, 95.86),
+                _zh_utterance("滚动", 95.86, 96.82),
+                _zh_utterance("装香料的托盘走什么呢香", 97.855, 101.215),
+                _zh_utterance("料和炉", 101.695, 102.575),
+                _zh_utterance("灰", 102.575, 103.215),
+                _zh_utterance("不会撒出去长平香炉", 103.615, 106.175),
+            ]
+        }
+    }
+
+    cues = ai._deepgram_cues(payload, media_duration=200.0)
+
+    assert len(cues) < 8  # the fragments were joined, not passed straight through
+    for cue in cues:
+        duration = cue["end"] - cue["start"]
+        length = len(cue["text"].replace("\n", ""))
+        assert duration >= subtitles.CJK_STYLE.min_duration
+        assert length <= subtitles.CJK_STYLE.max_chars
+        assert length / duration <= subtitles.CJK_STYLE.max_cps
+        for line in cue["text"].split("\n"):
+            assert len(line) <= subtitles.CJK_STYLE.max_line_chars
+
+
+def test_deepgram_chinese_cues_carry_no_invented_spaces():
+    payload = {"results": {"utterances": [_zh_utterance("不管这香炉怎么滚动", 0.0, 3.0)]}}
+
+    cues = ai._deepgram_cues(payload, media_duration=10.0)
+
+    assert " " not in "".join(cue["text"] for cue in cues)
+
+
+def test_deepgram_still_separates_two_speakers_mid_sentence():
+    payload = {
+        "results": {
+            "utterances": [
+                _zh_utterance("看清楚", 0.0, 0.8, speaker=0),
+                _zh_utterance("了吧", 0.8, 1.6, speaker=1),
+            ]
+        }
+    }
+
+    cues = ai._deepgram_cues(payload, media_duration=10.0)
+
+    assert [cue["speaker"] for cue in cues] == [0, 1]
+
+
+def test_an_overflowing_group_is_cut_at_the_pause_not_where_the_budget_ends():
+    """A budget overflow knows nothing about where the sentence breaks, so it
+    has to reach back to the last real boundary instead of cutting in place."""
+
+    words = []
+    # 30 glyphs at 0.25s each, with a clear 0.5s pause after the 12th.
+    cursor = 0.0
+    for index in range(30):
+        if index == 12:
+            cursor += 0.5
+        words.append(
+            {
+                "token": "不",
+                "raw_word": "不",
+                "start": round(cursor, 3),
+                "end": round(cursor + 0.25, 3),
+                "speaker": 0,
+            }
+        )
+        cursor += 0.25
+
+    cues = ai._segment_words_into_cues(words, media_duration=60.0)
+
+    assert len(cues[0]["text"].replace("\n", "")) == 12
+    assert cues[0]["end"] == words[11]["end"]
+    assert cues[1]["start"] == words[12]["start"]

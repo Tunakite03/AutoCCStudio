@@ -1,3 +1,4 @@
+import time
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
@@ -5,7 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend import httpclient
+from backend import cancellation, httpclient
+from backend.apikeys import CredentialPool
 
 
 def serve(handler_factory):
@@ -35,6 +37,29 @@ def make_handler(statuses, seen, extra_headers=None):
             self.send_header("Content-Length", str(len(body)))
             for name, value in (extra_headers or {}).items():
                 self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    return Handler
+
+
+def make_key_handler(seen, decide):
+    """Stub that answers per credential. `decide(key, request_number) -> status`."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", "0"))
+            self.rfile.read(length)
+            key = (self.headers.get("Authorization") or "").removeprefix("Bearer ")
+            seen.append(key)
+            status = decide(key, len(seen))
+            body = b'{"ok":true}' if status == 200 else b'{"error":"rate limit"}'
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
 
@@ -171,6 +196,214 @@ def test_a_client_error_is_not_retried():
     finally:
         shutdown()
     assert len(seen) == 1
+
+
+# ── Key rotation ─────────────────────────────────────────────────────
+
+
+def test_a_rate_limited_key_is_swapped_for_the_next_one_without_waiting(monkeypatch):
+    """With a pool, a 429 costs a rotation instead of a backoff. Waiting out a
+    per-minute quota on key 1 while keys 2..8 sit idle is the bug."""
+
+    waits = []
+    monkeypatch.setattr(httpclient, "_wait", waits.append)
+    seen = []
+    port, shutdown = serve(
+        make_key_handler(seen, lambda key, _n: 429 if key == "key-a" else 200)
+    )
+    try:
+        response = httpclient.post(
+            f"http://127.0.0.1:{port}/v1",
+            headers={},
+            json_body={},
+            timeout=(5, 5),
+            label="Stub",
+            retries=0,
+            credentials=CredentialPool(["key-a", "key-b"]),
+        )
+        assert httpclient.json_body(response, "Stub") == {"ok": True}
+    finally:
+        shutdown()
+    assert seen == ["key-a", "key-b"]
+    assert waits == [], "a rotation must not cost a backoff"
+
+
+def test_the_first_key_is_tried_again_once_its_window_reopens(monkeypatch):
+    """The failure this exists to prevent: rotating to the last key, declaring
+    the pool spent, and never noticing that key 1 recovered while we worked
+    through the others."""
+
+    monkeypatch.setattr(httpclient, "RATE_LIMIT_BASE_SECONDS", 0.05)
+    monkeypatch.setattr(httpclient, "RATE_LIMIT_MIN_SECONDS", 0.05)
+    waits = []
+
+    def record_and_sleep(seconds):
+        waits.append(seconds)
+        # Overshoot: time.monotonic() advances in ~16 ms steps on Windows, and
+        # waking a tick early would send the pool round a second, flaky wait.
+        time.sleep(seconds + 0.05)
+
+    monkeypatch.setattr(httpclient, "_wait", record_and_sleep)
+    seen = []
+    # Both keys are limited on the first pass; by the third request key-a is
+    # through its window again.
+    port, shutdown = serve(
+        make_key_handler(seen, lambda key, n: 429 if n <= 2 else 200)
+    )
+    try:
+        response = httpclient.post(
+            f"http://127.0.0.1:{port}/v1",
+            headers={},
+            json_body={},
+            timeout=(5, 5),
+            label="Stub",
+            retries=0,
+            credentials=CredentialPool(["key-a", "key-b"]),
+        )
+        assert httpclient.json_body(response, "Stub") == {"ok": True}
+    finally:
+        shutdown()
+    assert seen == ["key-a", "key-b", "key-a"]
+    # Exactly one wait, and only once no key at all was free.
+    assert len(waits) == 1 and waits[0] > 0
+
+
+def test_when_every_key_is_limited_the_call_stops_and_names_the_reason(monkeypatch):
+    monkeypatch.setattr(
+        httpclient,
+        "settings",
+        replace(httpclient.settings, http_rate_limit_retries=0),
+    )
+    seen = []
+    port, shutdown = serve(make_key_handler(seen, lambda *_args: 429))
+    try:
+        with pytest.raises(httpclient.HTTPClientError) as error:
+            httpclient.post(
+                f"http://127.0.0.1:{port}/v1",
+                headers={},
+                json_body={},
+                timeout=(5, 5),
+                label="Stub",
+                retries=0,
+                credentials=CredentialPool(["key-a", "key-b", "key-c"]),
+            )
+        assert error.value.status_code == 429
+        assert "Cả 3 API key" in str(error.value)
+    finally:
+        shutdown()
+    # Every key was given its turn before giving up, and none was tried twice.
+    assert sorted(seen) == ["key-a", "key-b", "key-c"]
+
+
+def test_every_key_keeps_its_own_backoff(monkeypatch):
+    """A key that has failed three times must not drag a healthy key's cooldown
+    up with it — they are separate quotas."""
+
+    monkeypatch.setattr(httpclient, "RATE_LIMIT_BASE_SECONDS", 1.0)
+    monkeypatch.setattr(httpclient, "RATE_LIMIT_MIN_SECONDS", 0.0)
+    monkeypatch.setattr(httpclient, "_wait", lambda _seconds: None)
+    pool = CredentialPool(["tired", "fresh"])
+    pool.penalise("tired", 0)
+    pool.penalise("tired", 0)
+
+    seen = []
+    port, shutdown = serve(make_key_handler(seen, lambda key, _n: 429))
+    try:
+        with pytest.raises(httpclient.HTTPClientError):
+            httpclient.post(
+                f"http://127.0.0.1:{port}/v1",
+                headers={},
+                json_body={},
+                timeout=(5, 5),
+                label="Stub",
+                retries=0,
+                credentials=pool,
+            )
+    finally:
+        shutdown()
+    # 2 strikes carried in, one more here: 2^3 vs the fresh key's first 2^1.
+    assert pool.strikes("tired") == 3
+    assert pool.strikes("fresh") == 1
+
+
+def test_one_rejected_key_does_not_take_the_job_down_with_it():
+    """A typo in the third of eight keys used to kill roughly every eighth call
+    while the other seven worked perfectly."""
+
+    seen = []
+    port, shutdown = serve(
+        make_key_handler(seen, lambda key, _n: 401 if key == "typo" else 200)
+    )
+    pool = CredentialPool(["typo", "good"])
+    try:
+        for _ in range(2):
+            response = httpclient.post(
+                f"http://127.0.0.1:{port}/v1",
+                headers={},
+                json_body={},
+                timeout=(5, 5),
+                label="Stub",
+                retries=0,
+                credentials=pool,
+            )
+            assert httpclient.json_body(response, "Stub") == {"ok": True}
+    finally:
+        shutdown()
+    # Rejected once, then left out of rotation — not retried on the second call.
+    assert seen == ["typo", "good", "good"]
+    assert pool.strikes("typo") == 0, "a refused key is not a rate-limited one"
+
+
+def test_a_pool_of_nothing_but_bad_keys_says_which_setting_is_wrong():
+    seen = []
+    port, shutdown = serve(make_key_handler(seen, lambda *_args: 401))
+    try:
+        with pytest.raises(httpclient.HTTPClientError) as error:
+            httpclient.post(
+                f"http://127.0.0.1:{port}/v1",
+                headers={},
+                json_body={},
+                timeout=(5, 5),
+                label="Stub",
+                retries=0,
+                credentials=CredentialPool(["bad-a", "bad-b"]),
+            )
+        assert error.value.status_code == 401
+        assert "LLM_API_KEY" in str(error.value)
+    finally:
+        shutdown()
+    assert seen == ["bad-a", "bad-b"]
+
+
+def test_a_stopped_job_does_not_sit_out_the_rest_of_a_backoff(monkeypatch):
+    """A minute-long rate-limit wait must not make the Hủy button look dead."""
+
+    monkeypatch.setattr(httpclient, "STOP_CHECK_INTERVAL_SECONDS", 0.01)
+    checks = {"n": 0}
+
+    class Stopped(RuntimeError):
+        pass
+
+    def check():
+        checks["n"] += 1
+        if checks["n"] > 2:
+            raise Stopped()
+
+    cancellation.set_stop_check(check)
+    try:
+        with pytest.raises(Stopped):
+            httpclient._wait(30.0)
+    finally:
+        cancellation.clear_stop_check()
+    # It stopped inside the wait, not after serving all thirty seconds.
+    assert checks["n"] == 3
+
+
+def test_a_wait_without_a_job_behind_it_just_waits():
+    cancellation.clear_stop_check()
+    started = time.monotonic()
+    httpclient._wait(0.05)
+    assert time.monotonic() - started >= 0.05
 
 
 def test_each_retry_gets_a_fresh_request_body(tmp_path):

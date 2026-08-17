@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from urllib.parse import urlparse
 
 from fastapi import APIRouter
 
@@ -34,25 +35,64 @@ TRANSCRIPTION_MODELS = {
 }
 
 
-TRANSLATION_MODELS = {
-    "openai_compatible": [
-        {"value": "mistral-small-latest", "label": "Mistral Small — nhanh, tự nhiên"},
+# Every OpenAI-compatible endpoint speaks the same protocol but serves a
+# different catalogue, and a model name from the wrong catalogue is a 400 at
+# translate time rather than anything the UI can warn about. So the list is
+# keyed by endpoint host and the picker only ever offers what LLM_BASE_URL can
+# actually run.
+LLM_MODELS_BY_HOST = {
+    "mistral.ai": [
         {"value": "mistral-large-latest", "label": "Mistral Large — chất lượng cao"},
-        {"value": "open-mistral-nemo", "label": "Mistral Nemo 12B — cân bằng"},
-        {"value": "gpt-4o-mini", "label": "GPT-4o Mini — nhanh, chuẩn xác"},
-        {"value": "gpt-4o", "label": "GPT-4o — thông minh, văn phong mượt"},
-        {"value": "qwen2.5:7b", "label": "Qwen 2.5 7B — khuyên dùng Ollama"},
-        {"value": "qwen2.5:14b", "label": "Qwen 2.5 14B — dịch sắc thái tốt"},
-        {"value": "qwen2.5:32b", "label": "Qwen 2.5 32B — dịch xuất sắc"},
-        {"value": "deepseek-chat", "label": "DeepSeek V3 — chi tiết, tự nhiên"},
-        {"value": "llama3.1:8b", "label": "Llama 3.1 8B — phổ biến"},
+        {"value": "mistral-medium-latest", "label": "Mistral Medium — cân bằng"},
+        {"value": "mistral-small-latest", "label": "Mistral Small — nhanh, tự nhiên"},
+        {"value": "open-mistral-nemo", "label": "Mistral Nemo 12B — nhẹ, rẻ"},
     ],
-    "transformers": [
-        {"value": "Helsinki-NLP/opus-mt-en-vi", "label": "Opus-MT En-Vi (Helsinki-NLP)"},
-        {"value": "facebook/nllb-200-distilled-600M", "label": "NLLB-200 Distilled 600M (Meta)"},
-        {"value": "vinai/vinai-translate-en2vi", "label": "VinAI Translate En-Vi"},
+    "openai.com": [
+        {"value": "gpt-4o", "label": "GPT-4o — thông minh, văn phong mượt"},
+        {"value": "gpt-4o-mini", "label": "GPT-4o Mini — nhanh, chuẩn xác"},
+    ],
+    "deepseek.com": [
+        {"value": "deepseek-chat", "label": "DeepSeek V3 — chi tiết, tự nhiên"},
     ],
 }
+
+# Ollama and LM Studio serve whatever has been pulled locally, so this is a
+# starting point rather than a catalogue.
+LOCAL_LLM_MODELS = [
+    {"value": "qwen2.5:7b", "label": "Qwen 2.5 7B — khuyên dùng Ollama"},
+    {"value": "qwen2.5:14b", "label": "Qwen 2.5 14B — dịch sắc thái tốt"},
+    {"value": "qwen2.5:32b", "label": "Qwen 2.5 32B — dịch xuất sắc"},
+    {"value": "llama3.1:8b", "label": "Llama 3.1 8B — phổ biến"},
+]
+
+TRANSFORMERS_MODELS = [
+    {"value": "Helsinki-NLP/opus-mt-en-vi", "label": "Opus-MT En-Vi (Helsinki-NLP)"},
+    {"value": "facebook/nllb-200-distilled-600M", "label": "NLLB-200 Distilled 600M (Meta)"},
+    {"value": "vinai/vinai-translate-en2vi", "label": "VinAI Translate En-Vi"},
+]
+
+
+def _llm_endpoint_models(base_url: str) -> list[dict]:
+    """The models the configured endpoint will accept, most capable first."""
+
+    host = (urlparse(base_url.strip()).hostname or base_url.strip()).lower()
+    for suffix, models in LLM_MODELS_BY_HOST.items():
+        if host == suffix or host.endswith(f".{suffix}"):
+            return list(models)
+    return list(LOCAL_LLM_MODELS)
+
+
+def _translation_models() -> dict[str, list[dict]]:
+    """The picker's options, with the configured model guaranteed present."""
+
+    options = _llm_endpoint_models(settings.llm_base_url)
+    configured = settings.llm_model.strip()
+    if configured and not any(item["value"] == configured for item in options):
+        options.insert(0, {"value": configured, "label": f"{configured} — từ .env"})
+    return {
+        "openai_compatible": options,
+        "transformers": list(TRANSFORMERS_MODELS),
+    }
 
 
 @router.get("/health")
@@ -103,9 +143,14 @@ def capabilities() -> dict:
         "transcription_models": TRANSCRIPTION_MODELS,
         "translation_provider": translation_provider,
         "translation_model": _translation_model(translation_provider),
-        "translation_models": TRANSLATION_MODELS,
+        "translation_models": _translation_models(),
+        "llm_endpoint": urlparse(settings.llm_base_url.strip()).hostname or "",
         "transformers_available": transformers_available,
         "llm_configured": llm_configured,
+        # How many keys the rotation has to work with — the count only, never a
+        # key. Without it there is no way to tell a mis-parsed LLM_API_KEY list
+        # from a working one until a job dies on a rate limit.
+        "llm_key_count": len(settings.llm_api_keys),
         "translation_configured": _translation_configured(translation_provider),
         "translation_styles": style_options(),
         "llm_model": settings.llm_model,

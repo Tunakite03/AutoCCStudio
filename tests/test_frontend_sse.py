@@ -34,6 +34,27 @@ def test_frontend_can_reanalyze_existing_cues_without_transcribing_again():
     assert '$("#reanalyze-speakers-btn").addEventListener' in source
 
 
+def test_frontend_can_stop_a_running_job_and_shows_that_it_is_stopping():
+    """The stop is cooperative, so the button has to survive the gap between the
+    request and the worker noticing it — hence the disabled "đang dừng" state."""
+
+    source = frontend_source()
+    markup = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'id="cancel-job-btn"' in markup
+    assert "/cancel`" in source
+    assert '$("#cancel-job-btn").addEventListener' in source
+    assert 'job.status === "cancelled"' in source
+    assert "cancel_requested" in source
+
+
+def test_frontend_can_translate_from_a_chosen_cue_onwards():
+    source = frontend_source()
+    markup = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'id="translate-from-btn"' in markup
+    assert "from_cue: fromCue" in source
+    assert "runTranslation(state.selected)" in source
+
+
 def test_router_screen_lookup_cannot_match_the_document_element():
     """<html> carries the active-screen marker for CSS. A bare [data-screen]
     query would match it first and hide every real screen — a blank app."""

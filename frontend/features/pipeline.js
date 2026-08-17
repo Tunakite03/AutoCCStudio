@@ -75,9 +75,34 @@ function engineForm() {
   return form;
 }
 
+/**
+ * Prompt confirmation if the user hasn't chosen an explicit audio language (still on auto-detect).
+ * Returns true if confirmed or already selected, false if user cancelled.
+ */
+async function confirmLanguageSelection() {
+  const lang = $("#source-language")?.value;
+  if (!lang || lang === "auto") {
+    const confirmed = await confirmAction({
+      title: "Chưa chọn ngôn ngữ audio",
+      target: "Đang để: Tự nhận diện (Auto-detect)",
+      note: "Chỉ định đúng ngôn ngữ audio của video (ví dụ: Tiếng Việt, Tiếng Anh...) sẽ giúp AI nhận dạng nhanh và chính xác hơn đáng kể.\n\nBạn có muốn tiếp tục nhận dạng tự động không?",
+      confirmLabel: "Tiếp tục",
+      cancelLabel: "Chọn lại ngôn ngữ",
+      variant: "warning",
+    });
+    if (!confirmed) {
+      $("#source-language")?.focus();
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function transcribe() {
   const file = pickedVideo();
   if (!file) return rerunTranscription();
+
+  if (!(await confirmLanguageSelection())) return;
 
   const form = engineForm();
   form.append("video", file);
@@ -110,6 +135,8 @@ async function rerunTranscription() {
     if (!confirmed) return;
   }
 
+  if (!(await confirmLanguageSelection())) return;
+
   try {
     setStatus("Đang xếp hàng nhận dạng lại…", "busy");
     const updated = await api.retranscribe(job.id, engineForm());
@@ -121,8 +148,12 @@ async function rerunTranscription() {
   }
 }
 
-export async function translate() {
-  if (!hasCues()) return toast("Cần có cue trước khi dịch", "error");
+const translatedCount = () => cues().filter((cue) => (cue.translation || "").trim()).length;
+
+/** `fromCue` is 0-based; 0 means the whole project. Cues before it keep the
+ *  translation they already carry, which is what makes a stopped run resumable
+ *  instead of something you pay for twice. */
+async function runTranslation(fromCue) {
   try {
     const job = await api.translate(
       state.job.id,
@@ -131,13 +162,41 @@ export async function translate() {
       $("#translation-style-notes").value,
       $("#translation-provider").value,
       $("#translation-model").value,
+      fromCue,
     );
     adoptJob(job, { keepSelection: true });
-    toast("Đã đưa phụ đề vào hàng đợi dịch", "success");
+    toast(
+      fromCue ? `Đang dịch tiếp từ cue ${fromCue + 1}` : "Đã đưa phụ đề vào hàng đợi dịch",
+      "success",
+    );
     watchJob(job.id);
   } catch (error) {
     reportError(error);
   }
+}
+
+export async function translate() {
+  if (!hasCues()) return toast("Cần có cue trước khi dịch", "error");
+
+  const done = translatedCount();
+  if (done) {
+    const confirmed = await confirmAction({
+      title: "Dịch lại toàn bộ?",
+      target: state.job.video_name || state.job.subtitle_name || "project này",
+      note: `${done} cue đã có bản dịch sẽ bị dịch lại từ đầu. Muốn giữ phần đã xong thì chọn cue cần dịch tiếp rồi bấm “Dịch từ cue…”.`,
+      confirmLabel: "Dịch lại tất cả",
+      cancelLabel: "Giữ nguyên",
+    });
+    if (!confirmed) return;
+  }
+  runTranslation(0);
+}
+
+/** Pick up where a stopped run left off, or re-do one scene onwards. */
+export async function translateFromSelection() {
+  if (!hasCues()) return toast("Cần có cue trước khi dịch", "error");
+  if (state.selected < 0) return toast("Chọn cue muốn dịch từ đó trở đi", "error");
+  runTranslation(state.selected);
 }
 
 export async function reanalyzeSpeakers() {
@@ -260,8 +319,12 @@ function renderCapabilityNote(capabilities) {
     currentTransProvider === "transformers"
       ? capabilities.transformers_available && Boolean(currentTransModel)
       : capabilities.llm_configured;
+  // Naming the endpoint makes a mismatched model obvious before the run
+  // fails: "gpt-4o @ api.mistral.ai" is visibly wrong, "gpt-4o" is not.
+  const endpoint =
+    currentTransProvider === "transformers" ? "" : capabilities.llm_endpoint || "";
   const translation = translationReady
-    ? currentTransModel || currentTransProvider
+    ? `${currentTransModel || currentTransProvider}${endpoint ? ` @ ${endpoint}` : ""}`
     : `${currentTransProvider} (chưa cấu hình)`;
 
   const speakerAnalysis = $("#speaker-analysis");
@@ -311,6 +374,11 @@ function restoreTranslationFromJob() {
   } else if (job.translation_model) {
     syncTranslationModelOptions(job.translation_model);
   }
+  const sourceLang = job.source_language || job.detected_language;
+  const sourceLangSelect = $("#source-language");
+  if (sourceLang && [...sourceLangSelect.options].some((o) => o.value === sourceLang)) {
+    sourceLangSelect.value = sourceLang;
+  }
 }
 
 export async function loadCapabilities() {
@@ -348,6 +416,12 @@ function refreshButtons() {
   $("#reanalyze-speakers-btn").disabled =
     blocked || !cued || !state.capabilities?.speaker_analysis_configured;
   $("#translate-btn").disabled = blocked || !cued;
+  // A project that already has translations is never "dịch" again, it is
+  // "dịch lại" — and that word is the warning the confirm then spells out.
+  $("#translate-label").textContent = translatedCount() ? "Dịch lại toàn bộ" : "Dịch toàn bộ cue";
+  $("#translate-from-btn").disabled = blocked || !cued || state.selected < 0;
+  $("#translate-from-label").textContent =
+    state.selected >= 0 ? `Dịch từ cue ${state.selected + 1} trở đi` : "Dịch từ cue đang chọn";
   $("#download-source-srt").disabled = !cued;
   $("#download-translated-srt").disabled = !cued;
   $("#download-vtt").disabled = !cued;
@@ -364,6 +438,7 @@ export function mountPipeline() {
   $("#transcribe-btn").addEventListener("click", transcribe);
   $("#reanalyze-speakers-btn").addEventListener("click", reanalyzeSpeakers);
   $("#translate-btn").addEventListener("click", translate);
+  $("#translate-from-btn").addEventListener("click", translateFromSelection);
   $("#transcription-provider").addEventListener("change", () => syncModelOptions());
   $("#transcription-model").addEventListener("change", updateEngineChip);
   $("#translation-provider").addEventListener("change", () => syncTranslationModelOptions());
@@ -377,7 +452,8 @@ export function mountPipeline() {
   $("#mux-btn").addEventListener("click", muxVideo);
 
   on("job:loaded", restoreTranslationFromJob);
-  onAny(["job:loaded", "cues:changed"], refreshButtons);
+  // selection:changed too — the resume button names the cue it would start from.
+  onAny(["job:loaded", "cues:changed", "selection:changed"], refreshButtons);
   on("capabilities:loaded", refreshButtons);
   refreshButtons();
 }

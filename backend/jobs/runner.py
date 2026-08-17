@@ -14,9 +14,11 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
+from ..cancellation import OperationCancelled, clear_stop_check, set_stop_check
 from ..config import get_logger
 from .model import (
     PHASE_QUEUED,
+    STATUS_CANCELLED,
     STATUS_COMPLETED,
     STATUS_ERROR,
     make_progress,
@@ -34,7 +36,9 @@ class JobContext:
     """What a job function is given: scoped access to its own job.
 
     Progress ticks publish over SSE without a disk write — they are worth
-    streaming, not worth an fsync each.
+    streaming, not worth an fsync each. They are also where a stop request is
+    noticed: a running thread cannot be killed from outside, so every phase
+    reports often enough to double as a cancellation checkpoint.
     """
 
     def __init__(self, store: JobStore, job_id: str, operation: str):
@@ -64,6 +68,10 @@ class JobContext:
     ) -> None:
         try:
             with self.store.edit(self.job_id, persist=False) as job:
+                if job.get("cancel_requested"):
+                    # Raised before the progress write, so the last thing the UI
+                    # saw stays the last thing that actually happened.
+                    raise OperationCancelled(self.job_id)
                 job["progress"] = make_progress(
                     phase, current=current, total=total, message=message
                 )
@@ -71,11 +79,25 @@ class JobContext:
             raise JobCancelled(self.job_id) from exc
 
     def checkpoint(self, apply: Callable[[dict], None]) -> None:
-        """Persist partial results so a later failure does not discard them."""
+        """Persist partial results so a later failure does not discard them.
+
+        Deliberately does not stop on a cancel request: a worker checkpoints
+        precisely because it has something worth keeping. The `progress` call
+        that follows is what ends the run, one line later and one write safer.
+        """
 
         try:
             with self.store.edit(self.job_id) as job:
                 apply(job)
+        except JobNotFound as exc:
+            raise JobCancelled(self.job_id) from exc
+
+    def raise_if_cancelled(self) -> None:
+        """Stop between phases, where no progress tick would come for minutes."""
+
+        try:
+            if self.store.cancel_requested(self.job_id):
+                raise OperationCancelled(self.job_id)
         except JobNotFound as exc:
             raise JobCancelled(self.job_id) from exc
 
@@ -119,10 +141,17 @@ class JobRunner:
         """
         context = JobContext(self._store, job_id, operation)
         logger.info("job %s: %s started", job_id, operation)
+        # Lets code with no idea what a job is — an HTTP backoff, a provider
+        # loop — stop when this one is stopped.
+        set_stop_check(context.raise_if_cancelled)
         try:
             work(context)
         except (JobCancelled, JobNotFound):
             logger.info("job %s: %s abandoned, project was deleted", job_id, operation)
+            return
+        except OperationCancelled:
+            logger.info("job %s: %s stopped on request", job_id, operation)
+            self._stop(job_id)
             return
         except Exception as exc:
             # Nothing may escape: an unhandled error here would leave the job on
@@ -130,7 +159,26 @@ class JobRunner:
             logger.exception("job %s: %s failed", job_id, operation)
             self._fail(job_id, exc)
             return
+        finally:
+            # Pool threads outlive the run; a stale check would answer for the
+            # wrong job on the next one.
+            clear_stop_check()
         logger.info("job %s: %s finished", job_id, operation)
+
+    def _stop(self, job_id: str) -> None:
+        """Settle a run the user stopped, keeping whatever it already wrote."""
+
+        try:
+            with self._store.edit(job_id) as job:
+                job["status"] = STATUS_CANCELLED
+                job["error"] = None
+                job["progress"] = None
+                job["cancel_requested"] = False
+                if job.get("speaker_analysis_status") in {"pending", "processing"}:
+                    job["speaker_analysis_status"] = "cancelled"
+                    job["speaker_analysis_error"] = "Đã dừng theo yêu cầu"
+        except JobNotFound:
+            return
 
     def _fail(self, job_id: str, exc: Exception) -> None:
         try:
@@ -159,8 +207,14 @@ def describe_error(exc: Exception) -> str:
 
 
 def finish(job: dict) -> None:
-    """Mark a job completed and clear the transient fields."""
+    """Mark a job completed and clear the transient fields.
+
+    A stop request that arrives after the last checkpoint is dropped here on
+    purpose: the work is done, and leaving the flag up would stop the *next* run
+    before it started.
+    """
 
     job["status"] = STATUS_COMPLETED
     job["error"] = None
     job["progress"] = None
+    job["cancel_requested"] = False

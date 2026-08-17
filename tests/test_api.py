@@ -682,6 +682,246 @@ def test_a_failed_batch_keeps_the_translations_that_already_succeeded(monkeypatc
         cleanup(job["id"])
 
 
+# ── Stopping a run ───────────────────────────────────────────────────
+
+
+def long_job(name="long.srt", count=50, **fields):
+    """A subtitle project with enough cues to span several translation batches."""
+
+    return make_job(
+        "subtitle_import",
+        subtitle_name=name,
+        cues=[
+            {"id": i, "start": i, "end": i + 1, "text": f"line {i}", "translation": ""}
+            for i in range(1, count + 1)
+        ],
+        **fields,
+    )
+
+
+def test_a_stop_request_lands_at_the_next_checkpoint_and_keeps_what_was_translated(monkeypatch):
+    """A worker thread cannot be killed, so stopping is a flag it notices. What
+    it had already checkpointed is the point of stopping rather than deleting."""
+
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    job = long_job(status="processing")
+    calls = {"n": 0}
+    real_batch = ai_module._translate_batch
+
+    def stop_after_second_batch(lines, target_language, **context):
+        calls["n"] += 1
+        translations = real_batch(lines, target_language, **context)
+        if calls["n"] == 2:
+            assert client.post(f"/api/jobs/{job['id']}/cancel").status_code == 200
+        return translations
+
+    monkeypatch.setattr(ai_module, "_translate_batch", stop_after_second_batch)
+
+    try:
+        runner.run_blocking(job["id"], "translation", translation_task("Tiếng Việt"))
+        result = client.get(f"/api/jobs/{job['id']}").json()
+        assert result["status"] == "cancelled"
+        assert result["error"] is None
+        assert result["progress"] is None
+        # Lowered again, or the next run would stop before it started.
+        assert result["cancel_requested"] is False
+        assert calls["n"] == 2, "the third batch was paid for after the stop"
+        translated = [cue["translation"] for cue in result["cues"] if cue["translation"]]
+        assert len(translated) == 40, len(translated)
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_job_stays_processing_until_the_worker_notices_the_stop():
+    """The whole "đang dừng…" state: Deepgram sends one request for an entire
+    video, so the flag can be up for minutes before anything acts on it."""
+
+    job = long_job(name="inflight.srt", status="processing")
+    try:
+        accepted = client.post(f"/api/jobs/{job['id']}/cancel").json()
+        assert accepted["cancel_requested"] is True
+        assert accepted["status"] == "processing"
+
+        # And it survives a reload, so a refreshed browser still shows it.
+        store.discard_from_memory(job["id"])
+        assert json.loads((RUNTIME_DIR / job["id"] / "job.json").read_text("utf-8"))[
+            "cancel_requested"
+        ] is True
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_stop_reaches_a_worker_that_is_waiting_out_a_rate_limit(monkeypatch):
+    """Rate-limit backoffs are the longest a worker ever blocks. If the stop is
+    only read between HTTP calls, the button looks dead for a whole minute."""
+
+    from backend import httpclient
+
+    job = long_job(name="waiting.srt", count=2, status="processing")
+
+    def wait_like_a_rate_limited_provider(*_args, **_kwargs):
+        assert client.post(f"/api/jobs/{job['id']}/cancel").status_code == 200
+        httpclient._wait(30.0)
+        pytest.fail("the backoff sat through the stop request")
+
+    monkeypatch.setattr(tasks_module, "translate_cues", wait_like_a_rate_limited_provider)
+
+    try:
+        started = time.monotonic()
+        runner.run_blocking(job["id"], "translation", translation_task("Tiếng Việt"))
+        assert time.monotonic() - started < 5.0, "it waited out the whole backoff"
+        assert client.get(f"/api/jobs/{job['id']}").json()["status"] == "cancelled"
+    finally:
+        cleanup(job["id"])
+
+
+def test_stopping_a_job_that_is_not_running_is_refused():
+    job = long_job(name="idle.srt", count=2)
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/cancel")
+        assert response.status_code == 409
+        assert client.get(f"/api/jobs/{job['id']}").json()["cancel_requested"] is False
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_stop_between_phases_keeps_the_transcript_and_skips_the_speaker_pass(monkeypatch):
+    """Deepgram's single opaque request cannot be interrupted, so the stop is
+    noticed once it returns — after the expensive part is safely written."""
+
+    job = make_job(
+        "transcription",
+        video_name="stop.mp4",
+        status="processing",
+        speaker_analysis_requested=True,
+        speaker_analysis_status="pending",
+    )
+    job["video_path"] = str(RUNTIME_DIR / job["id"] / "video.mp4")
+    store.create(job)
+
+    def transcribe_then_stop(*_args, **_kwargs):
+        assert client.post(f"/api/jobs/{job['id']}/cancel").status_code == 200
+        return [{"id": 1, "start": 0, "end": 1, "text": "kept", "translation": ""}], "en"
+
+    def unreachable_analysis(*_args, **_kwargs):
+        pytest.fail("speaker analysis ran after the job was stopped")
+
+    monkeypatch.setattr(tasks_module, "transcribe_video", transcribe_then_stop)
+    monkeypatch.setattr(tasks_module, "analyze_dialogue_turns", unreachable_analysis)
+
+    try:
+        runner.run_blocking(
+            job["id"], "transcription", transcription_task("deepgram", "nova-3", "en", True)
+        )
+        result = client.get(f"/api/jobs/{job['id']}").json()
+        assert result["status"] == "cancelled"
+        assert [cue["text"] for cue in result["cues"]] == ["kept"]
+        assert result["speaker_analysis_status"] == "cancelled"
+    finally:
+        cleanup(job["id"])
+
+
+def test_editing_the_cues_of_a_stopped_job_hands_the_project_back(monkeypatch):
+    job = long_job(name="stopped.srt", count=2, status="cancelled")
+    try:
+        response = client.put(
+            f"/api/jobs/{job['id']}/cues",
+            json={"cues": [{"id": 1, "start": 0, "end": 1, "text": "sửa tay"}]},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "completed"
+    finally:
+        cleanup(job["id"])
+
+
+# ── Resuming a translation ───────────────────────────────────────────
+
+
+def test_translation_resumes_from_a_cue_without_paying_for_the_earlier_ones(monkeypatch):
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    sent = []
+    real_batch = ai_module._translate_batch
+
+    def recording_batch(lines, target_language, **context):
+        sent.extend(line["text"] for line in lines)
+        return real_batch(lines, target_language, **context)
+
+    monkeypatch.setattr(ai_module, "_translate_batch", recording_batch)
+
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="resume.srt",
+        cues=[
+            {"id": 1, "start": 0, "end": 1, "text": "line 1", "translation": "giữ nguyên"},
+            {"id": 2, "start": 1, "end": 2, "text": "line 2", "translation": ""},
+            {"id": 3, "start": 2, "end": 3, "text": "line 3", "translation": ""},
+        ],
+    )
+    try:
+        runner.run_blocking(
+            job["id"], "translation", translation_task("Tiếng Việt", from_cue=1)
+        )
+        result = client.get(f"/api/jobs/{job['id']}").json()
+        assert sent == ["line 2", "line 3"]
+        assert [cue["translation"] for cue in result["cues"]] == [
+            "giữ nguyên",
+            "[Tiếng Việt] line 2",
+            "[Tiếng Việt] line 3",
+        ]
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_resumed_batch_still_sees_the_lines_translated_before_it(monkeypatch):
+    """Consistency is the whole reason batches carry context. A resume that
+    quoted empty strings back to the model would drift at the seam."""
+
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    context_seen = {}
+    real_batch = ai_module._translate_batch
+
+    def recording_batch(lines, target_language, **context):
+        context_seen.setdefault("before", context.get("context_before"))
+        return real_batch(lines, target_language, **context)
+
+    monkeypatch.setattr(ai_module, "_translate_batch", recording_batch)
+
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="seam.srt",
+        cues=[
+            {"id": 1, "start": 0, "end": 1, "text": "line 1", "translation": "đã dịch 1"},
+            {"id": 2, "start": 1, "end": 2, "text": "line 2", "translation": ""},
+        ],
+    )
+    try:
+        runner.run_blocking(
+            job["id"], "translation", translation_task("Tiếng Việt", from_cue=1)
+        )
+        assert [item["translation"] for item in context_seen["before"]] == ["đã dịch 1"]
+    finally:
+        cleanup(job["id"])
+
+
+def test_translate_route_rejects_a_start_cue_past_the_last_one():
+    job = long_job(name="short.srt", count=3)
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={"target_language": "Tiếng Việt", "from_cue": 3},
+        )
+        assert response.status_code == 400
+        assert "vị trí đó" in response.json()["detail"]
+    finally:
+        cleanup(job["id"])
+
+
 def test_processing_job_loaded_only_from_disk_is_marked_interrupted():
     job = make_job(
         "transcription",
@@ -914,3 +1154,95 @@ def test_capabilities_reports_translation_models():
     models = [m["value"] for m in data["translation_models"]["openai_compatible"]]
     assert "mistral-small-latest" in models
 
+
+
+# ── Translation model catalogue ──────────────────────────────────────
+
+
+def test_the_model_picker_only_offers_models_the_endpoint_can_run(monkeypatch):
+    """A model name from the wrong catalogue is a 400 at translate time, which
+    the UI cannot warn about — so it must never be offered in the first place."""
+
+    import backend.api.system as system_api
+
+    monkeypatch.setattr(
+        system_api,
+        "settings",
+        replace(
+            system_api.settings,
+            llm_base_url="https://api.mistral.ai/v1",
+            llm_model="mistral-large-latest",
+        ),
+    )
+    options = client.get("/api/capabilities").json()["translation_models"]
+    values = [item["value"] for item in options["openai_compatible"]]
+
+    assert "mistral-large-latest" in values
+    assert not [value for value in values if value.startswith("gpt-")]
+    assert not [value for value in values if value.startswith("qwen")]
+
+
+def test_an_openai_endpoint_offers_openai_models(monkeypatch):
+    import backend.api.system as system_api
+
+    monkeypatch.setattr(
+        system_api,
+        "settings",
+        replace(
+            system_api.settings,
+            llm_base_url="https://api.openai.com/v1",
+            llm_model="gpt-4o",
+        ),
+    )
+    values = [
+        item["value"]
+        for item in client.get("/api/capabilities").json()["translation_models"][
+            "openai_compatible"
+        ]
+    ]
+
+    assert "gpt-4o" in values
+    assert not [value for value in values if value.startswith("mistral")]
+
+
+def test_a_local_endpoint_falls_back_to_the_local_model_list(monkeypatch):
+    import backend.api.system as system_api
+
+    monkeypatch.setattr(
+        system_api,
+        "settings",
+        replace(
+            system_api.settings,
+            llm_base_url="http://localhost:11434/v1",
+            llm_model="qwen2.5:7b",
+        ),
+    )
+    values = [
+        item["value"]
+        for item in client.get("/api/capabilities").json()["translation_models"][
+            "openai_compatible"
+        ]
+    ]
+
+    assert "qwen2.5:7b" in values
+    assert "llama3.1:8b" in values
+
+
+def test_a_model_configured_in_env_is_always_offered(monkeypatch):
+    import backend.api.system as system_api
+
+    monkeypatch.setattr(
+        system_api,
+        "settings",
+        replace(
+            system_api.settings,
+            llm_base_url="https://api.mistral.ai/v1",
+            llm_model="ministral-8b-latest",
+        ),
+    )
+    body = client.get("/api/capabilities").json()
+    options = body["translation_models"]["openai_compatible"]
+
+    assert options[0]["value"] == "ministral-8b-latest"
+    assert "từ .env" in options[0]["label"]
+    assert body["llm_endpoint"] == "api.mistral.ai"

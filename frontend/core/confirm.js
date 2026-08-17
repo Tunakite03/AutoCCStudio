@@ -16,6 +16,7 @@ export function confirmAction({
   note = "",
   confirmLabel = "Đồng ý",
   cancelLabel = "Hủy",
+  variant = "danger",
 }) {
   const dialog = $("#confirm-dialog");
   const okButton = $("#confirm-ok");
@@ -28,6 +29,14 @@ export function confirmAction({
   $("#confirm-note").textContent = note;
   okButton.textContent = confirmLabel;
   cancelButton.textContent = cancelLabel;
+
+  if (variant === "warning" || variant === "primary" || variant === "accent") {
+    okButton.className =
+      "h-8 px-3.5 rounded-sm bg-accent text-accent-ink text-[12.5px] font-semibold transition-[filter] duration-120 hover:brightness-110";
+  } else {
+    okButton.className =
+      "h-8 px-3.5 rounded-sm bg-crit text-white text-[12.5px] font-semibold transition-[filter] duration-120 hover:brightness-110";
+  }
 
   return new Promise((resolve) => {
     let settled = false;

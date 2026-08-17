@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Iterable
 
 
@@ -20,18 +21,183 @@ class SubtitleParseError(ValueError):
     """Raised when a subtitle cannot be parsed."""
 
 
+# ── Script awareness ─────────────────────────────────────────────
+#
+# Every length budget below used to be a plain character count, which silently
+# assumes a Latin script: 40 characters is a comfortable subtitle line in
+# English and roughly two and a half lines in Chinese. Worse, all the splitting
+# was anchored on whitespace, and Chinese has none — so a Chinese cue could
+# neither be wrapped nor split, and the only breaks left were the blunt ones.
+
+# Han, Hiragana, Katakana, Hangul, plus the fullwidth/CJK punctuation blocks.
+CJK_RE = re.compile(
+    r"[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]"
+)
+# Punctuation that closes a sentence in CJK typesetting.
+CJK_SENTENCE_ENDERS = "。？！…‥"
+# Punctuation that closes a clause — a good, cheap break point.
+CJK_CLAUSE_ENDERS = "，、；：·"
+# Must never start a line: closing brackets and trailing marks.
+CJK_NO_LINE_START = "。？！…‥，、；：·》）］｝」』〉”’%）"
+# Must never end a line: opening brackets.
+CJK_NO_LINE_END = "《（［｛「『〈“‘（"
+
+
+def is_cjk_char(char: str) -> bool:
+    return bool(CJK_RE.match(char))
+
+
+def cjk_ratio(text: str) -> float:
+    """Share of the letters in `text` that are CJK ideographs or kana."""
+
+    letters = [char for char in str(text) if not char.isspace()]
+    if not letters:
+        return 0.0
+    return sum(1 for char in letters if is_cjk_char(char)) / len(letters)
+
+
+def is_cjk_text(text: str) -> bool:
+    """True when the text should be measured and broken as CJK.
+
+    The threshold is low on purpose: a Chinese line carrying a Latin name or a
+    number is still a Chinese line, and mis-measuring it as Latin is what makes
+    cues run two and a half lines long.
+    """
+
+    return cjk_ratio(text) >= 0.2
+
+
+def display_width(text: str) -> int:
+    """Length in Latin-equivalent columns, counting CJK glyphs as two."""
+
+    return sum(2 if is_cjk_char(char) else 1 for char in str(text))
+
+
+@dataclass(frozen=True)
+class CueStyle:
+    """The readability budget one script imposes on a cue.
+
+    Values follow the usual broadcast guidance: about 42 characters per line
+    and 17-21 characters per second for Latin, roughly 16 glyphs per line and
+    9 glyphs per second for CJK, where each glyph carries far more meaning.
+    """
+
+    max_line_chars: int
+    max_lines: int
+    max_chars: int
+    max_cps: float
+    min_chars: int
+    min_duration: float
+    max_duration: float
+    min_gap: float
+    merge_gap: float
+    split_gap: float
+
+    def fits(self, text: str, duration: float) -> bool:
+        """True when `text` can be read comfortably in `duration` seconds."""
+
+        length = len(text.replace("\n", ""))
+        return (
+            length <= self.max_chars
+            and duration <= self.max_duration
+            and (duration <= 0 or length / duration <= self.max_cps)
+        )
+
+    def too_short(self, text: str, duration: float) -> bool:
+        """True when the cue is a fragment: too little text, or gone too fast."""
+
+        length = len(text.replace("\n", ""))
+        return length < self.min_chars or duration < self.min_duration
+
+
+LATIN_STYLE = CueStyle(
+    max_line_chars=42,
+    max_lines=2,
+    max_chars=84,
+    max_cps=21.0,
+    min_chars=12,
+    min_duration=1.0,
+    max_duration=7.0,
+    min_gap=0.08,
+    merge_gap=0.35,
+    split_gap=0.7,
+)
+
+CJK_STYLE = CueStyle(
+    max_line_chars=16,
+    max_lines=2,
+    max_chars=32,
+    max_cps=9.0,
+    min_chars=5,
+    min_duration=1.0,
+    max_duration=7.0,
+    min_gap=0.08,
+    merge_gap=0.45,
+    split_gap=0.7,
+)
+
+
+def style_for_text(text: str) -> CueStyle:
+    return CJK_STYLE if is_cjk_text(text) else LATIN_STYLE
+
+
+def join_tokens(tokens: Iterable[str]) -> str:
+    """Join recognised words, omitting the space CJK never writes."""
+
+    joined = ""
+    for token in tokens:
+        token = str(token).strip()
+        if not token:
+            continue
+        if joined and not (
+            is_cjk_char(joined[-1])
+            or is_cjk_char(token[0])
+            or token[0] in CJK_NO_LINE_START
+        ):
+            joined += " "
+        joined += token
+    return joined
+
+
 def strip_speaker_labels(text: str) -> str:
     """Remove legacy [S1]/[1] prefixes while preserving dialogue line breaks."""
 
     return SPEAKER_LABEL_RE.sub("", str(text))
 
 
-def balance_lines(text: str, max_line_len: int = 42, max_lines: int = 2) -> str:
-    """Balance text into at most `max_lines` (default 2 lines) with natural break points."""
+def _break_candidates(text: str) -> list[int]:
+    """Indices where a line break is typographically allowed.
+
+    Latin breaks at spaces. CJK has none, so every character boundary is a legal
+    break except the ones that would strand a closing mark at the start of a
+    line or an opening bracket at the end of one.
+    """
+
+    spaces = [match.start() for match in re.finditer(r"\s+", text)]
+    if spaces or not is_cjk_text(text):
+        return spaces
+    return [
+        index
+        for index in range(1, len(text))
+        if text[index] not in CJK_NO_LINE_START
+        and text[index - 1] not in CJK_NO_LINE_END
+    ]
+
+
+def balance_lines(text: str, max_line_len: int | None = None, max_lines: int = 2) -> str:
+    """Balance text into at most `max_lines` (default 2 lines) with natural break points.
+
+    `max_line_len` defaults to whatever the script of the text can carry, so a
+    caller that does not care about the distinction gets a readable Chinese line
+    instead of a Latin-length one.
+    """
 
     cleaned = strip_speaker_labels(str(text)).strip()
     if not cleaned:
         return ""
+
+    if max_line_len is None:
+        max_line_len = style_for_text(cleaned).max_line_chars
 
     # Normalize whitespace within each existing line
     lines = [re.sub(r"[ \t]+", " ", line).strip() for line in cleaned.splitlines() if line.strip()]
@@ -43,7 +209,7 @@ def balance_lines(text: str, max_line_len: int = 42, max_lines: int = 2) -> str:
         return "\n".join(lines)
 
     # Flatten text to rebalance
-    flat_text = " ".join(lines)
+    flat_text = join_tokens(lines) if is_cjk_text(cleaned) else " ".join(lines)
     if len(flat_text) <= max_line_len:
         return flat_text
 
@@ -56,29 +222,35 @@ def balance_lines(text: str, max_line_len: int = 42, max_lines: int = 2) -> str:
     best_index = -1
     best_score = float("inf")
 
-    # Look for candidate split spaces
-    spaces = [match.start() for match in re.finditer(r"\s+", flat_text)]
-    if not spaces:
+    candidates = _break_candidates(flat_text)
+    if not candidates:
         return flat_text
 
-    for space_idx in spaces:
-        left = flat_text[:space_idx].strip()
-        right = flat_text[space_idx:].strip()
+    sentence_enders = {".", "?", "!", "…"} | set(CJK_SENTENCE_ENDERS)
+    clause_enders = {",", ";", ":", "—", "–", '"', "'", "”"} | set(CJK_CLAUSE_ENDERS)
+
+    for index in candidates:
+        left = flat_text[:index].strip()
+        right = flat_text[index:].strip()
         if not left or not right:
             continue
 
-        # Prefer breaking after punctuation (,, ;, :, ., ?, !)
-        has_punct = left[-1] in {",", ";", ":", ".", "?", "!", "—", "–", '"', "'", "”"}
+        # Prefer breaking after punctuation, sentence ends most of all.
+        if left[-1] in sentence_enders:
+            punct_bonus = -25
+        elif left[-1] in clause_enders:
+            punct_bonus = -15
+        else:
+            punct_bonus = 0
         # Distance from middle
-        distance = abs(space_idx - midpoint)
+        distance = abs(index - midpoint)
         # Penalize if either line exceeds max_line_len
         overflow_penalty = max(0, len(left) - max_line_len) * 5 + max(0, len(right) - max_line_len) * 5
-        punct_bonus = -15 if has_punct else 0
         score = distance + overflow_penalty + punct_bonus
 
         if score < best_score:
             best_score = score
-            best_index = space_idx
+            best_index = index
 
     if best_index > 0:
         line1 = flat_text[:best_index].strip()
@@ -99,8 +271,12 @@ def _split_into_sentences(text: str) -> list[str]:
     raw_sentences = []
     for line in lines:
         # Match sentence-ending punctuation followed by space or end of string
-        # Avoid splitting on decimals (e.g. 5.50) or common abbreviations
-        splits = re.split(r"(?<=[.?!…])\s+(?=[A-ZÀ-Ỹ0-9\"'“‘])|(?<=[。？！])", line)
+        # Avoid splitting on decimals (e.g. 5.50) or common abbreviations.
+        # CJK writes no space after a full stop, so its enders split on sight.
+        splits = re.split(
+            rf"(?<=[.?!…])\s+(?=[A-ZÀ-Ỹ0-9\"'“‘])|(?<=[{CJK_SENTENCE_ENDERS}])",
+            line,
+        )
         for segment in splits:
             seg = segment.strip()
             if seg:
@@ -109,9 +285,45 @@ def _split_into_sentences(text: str) -> list[str]:
     return raw_sentences or [cleaned]
 
 
+def _split_into_clauses(sentence: str) -> list[str]:
+    """Break a sentence at clause punctuation, with or without a following space."""
+
+    parts = re.split(
+        rf"(?<=[,;:—–])\s+|(?<=[{CJK_CLAUSE_ENDERS}])",
+        sentence,
+    )
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _split_run(run: str, limit: int) -> list[str]:
+    """Chop an unbreakable run down to `limit`, by words or by characters."""
+
+    words = run.split()
+    if len(words) > 1:
+        pieces: list[str] = []
+        current: list[str] = []
+        current_len = 0
+        for word in words:
+            word_len = len(word) + (1 if current else 0)
+            if current and current_len + word_len > limit:
+                pieces.append(" ".join(current))
+                current = [word]
+                current_len = len(word)
+            else:
+                current.append(word)
+                current_len += word_len
+        if current:
+            pieces.append(" ".join(current))
+        return pieces
+
+    # A single "word" longer than the limit is either a CJK run or a URL; both
+    # have to be cut on a character boundary or they never get split at all.
+    return [run[index : index + limit] for index in range(0, len(run), limit)] or [run]
+
+
 def split_text_into_chunks(
     text: str,
-    max_chars: int = 75,
+    max_chars: int | None = None,
     total_duration: float | None = None,
     max_duration: float = 6.0,
 ) -> list[str]:
@@ -119,6 +331,9 @@ def split_text_into_chunks(
     sentences = _split_into_sentences(text)
     if not sentences:
         return []
+
+    if max_chars is None:
+        max_chars = style_for_text(text).max_chars
 
     # Calculate approx seconds per char if duration is provided
     total_chars = max(1, sum(len(s) for s in sentences))
@@ -128,8 +343,13 @@ def split_text_into_chunks(
     effective_max_chars = max_chars
     if sec_per_char and sec_per_char > 0:
         duration_char_limit = int(max_duration / sec_per_char)
-        if duration_char_limit >= 20:
+        # A CJK glyph is worth several Latin characters, so the floor that keeps
+        # a Latin chunk readable would swallow a whole Chinese cue.
+        floor = 8 if is_cjk_text(text) else 20
+        if duration_char_limit >= floor:
             effective_max_chars = min(max_chars, duration_char_limit)
+
+    joiner = join_tokens if is_cjk_text(text) else " ".join
 
     units: list[str] = []
     for sentence in sentences:
@@ -137,31 +357,11 @@ def split_text_into_chunks(
             units.append(sentence)
             continue
 
-        # Split long sentence by clauses (comma, semicolon, colon, dash)
-        clauses = re.split(r"(?<=[,;:—–])\s+", sentence)
-        for clause in clauses:
-            cl = clause.strip()
-            if not cl:
+        for clause in _split_into_clauses(sentence):
+            if len(clause) <= effective_max_chars:
+                units.append(clause)
                 continue
-            if len(cl) <= effective_max_chars:
-                units.append(cl)
-                continue
-
-            # Split remaining long clause by word boundaries
-            words = cl.split()
-            current_words: list[str] = []
-            current_len = 0
-            for word in words:
-                word_len = len(word) + (1 if current_words else 0)
-                if current_words and current_len + word_len > effective_max_chars:
-                    units.append(" ".join(current_words))
-                    current_words = [word]
-                    current_len = len(word)
-                else:
-                    current_words.append(word)
-                    current_len += word_len
-            if current_words:
-                units.append(" ".join(current_words))
+            units.extend(_split_run(clause, effective_max_chars))
 
     # Pack smaller consecutive units together up to effective_max_chars
     chunks: list[str] = []
@@ -172,7 +372,7 @@ def split_text_into_chunks(
         unit_len = len(unit) + (1 if current_chunk else 0)
         # If adding unit exceeds effective_max_chars, flush current_chunk
         if current_chunk and current_len + unit_len > effective_max_chars:
-            chunks.append(" ".join(current_chunk))
+            chunks.append(joiner(current_chunk))
             current_chunk = [unit]
             current_len = len(unit)
         else:
@@ -180,15 +380,15 @@ def split_text_into_chunks(
             current_len += unit_len
 
     if current_chunk:
-        chunks.append(" ".join(current_chunk))
+        chunks.append(joiner(current_chunk))
 
     return chunks
 
 
 def split_long_cue(
     cue: dict,
-    max_chars: int = 75,
-    max_duration: float = 6.0,
+    max_chars: int | None = None,
+    max_duration: float | None = None,
     max_lines: int = 2,
 ) -> list[dict]:
     """Split a single long cue into multiple smaller, comfortable subtitle cues."""
@@ -201,13 +401,20 @@ def split_long_cue(
     if not raw_text:
         return [dict(cue)]
 
+    style = style_for_text(raw_text)
+    if max_chars is None:
+        max_chars = style.max_chars
+    if max_duration is None:
+        max_duration = style.max_duration
+    line_len = min(style.max_line_chars, max_chars)
+
     flat_text = re.sub(r"\s+", " ", raw_text).strip()
     # If already short enough and line count is <= max_lines
     if duration <= max_duration and len(flat_text) <= max_chars and raw_text.count("\n") < max_lines:
         balanced_cue = dict(cue)
-        balanced_cue["text"] = balance_lines(raw_text, max_line_len=40, max_lines=max_lines)
+        balanced_cue["text"] = balance_lines(raw_text, max_line_len=line_len, max_lines=max_lines)
         if raw_translation:
-            balanced_cue["translation"] = balance_lines(raw_translation, max_line_len=40, max_lines=max_lines)
+            balanced_cue["translation"] = balance_lines(raw_translation, max_lines=max_lines)
         return [balanced_cue]
 
     text_chunks = split_text_into_chunks(
@@ -218,9 +425,9 @@ def split_long_cue(
     )
     if len(text_chunks) <= 1:
         balanced_cue = dict(cue)
-        balanced_cue["text"] = balance_lines(raw_text, max_line_len=40, max_lines=max_lines)
+        balanced_cue["text"] = balance_lines(raw_text, max_line_len=line_len, max_lines=max_lines)
         if raw_translation:
-            balanced_cue["translation"] = balance_lines(raw_translation, max_line_len=40, max_lines=max_lines)
+            balanced_cue["translation"] = balance_lines(raw_translation, max_lines=max_lines)
         return [balanced_cue]
 
     # Handle translation chunks if present
@@ -257,8 +464,8 @@ def split_long_cue(
                 "id": 0,
                 "start": round(sub_start, 3),
                 "end": round(max(sub_start + 0.12, sub_end), 3),
-                "text": balance_lines(chunk, max_line_len=40, max_lines=max_lines),
-                "translation": balance_lines(sub_translation, max_line_len=40, max_lines=max_lines),
+                "text": balance_lines(chunk, max_line_len=line_len, max_lines=max_lines),
+                "translation": balance_lines(sub_translation, max_lines=max_lines),
                 "speaker": cue.get("speaker"),
             }
         )
@@ -269,8 +476,8 @@ def split_long_cue(
 
 def split_long_cues(
     cues: Iterable[dict],
-    max_chars: int = 80,
-    max_duration: float = 6.5,
+    max_chars: int | None = None,
+    max_duration: float | None = None,
     max_lines: int = 2,
 ) -> list[dict]:
     """Process a list of cues, splitting any long dialogue cues and renumbering IDs."""
@@ -288,6 +495,124 @@ def split_long_cues(
         cue["id"] = index
 
     return new_cues
+
+
+def _ends_sentence(text: str) -> bool:
+    stripped = str(text).strip()
+    if not stripped:
+        return False
+    return stripped[-1] in (set(".?!…") | set(CJK_SENTENCE_ENDERS))
+
+
+def merge_short_cues(cues: Iterable[dict], style: CueStyle | None = None) -> list[dict]:
+    """Join fragment cues back onto the neighbour they were cut from.
+
+    Splitting alone produces the failure this fixes: a recogniser that hands
+    back "看清楚" and "了吧" as two utterances leaves two cues nobody can read,
+    because each is gone in under a second. A merge is allowed only when the
+    result still fits the reading budget, so nothing here can create the
+    opposite problem of an over-long cue.
+    """
+
+    merged: list[dict] = []
+    for cue in cues:
+        candidate = dict(cue)
+        if not merged:
+            merged.append(candidate)
+            continue
+
+        previous = merged[-1]
+        prev_text = str(previous.get("text", "")).strip()
+        next_text = str(candidate.get("text", "")).strip()
+        if not prev_text or not next_text:
+            merged.append(candidate)
+            continue
+
+        active = style or style_for_text(f"{prev_text}{next_text}")
+        prev_start = float(previous.get("start", 0.0))
+        prev_end = float(previous.get("end", prev_start))
+        next_start = float(candidate.get("start", prev_end))
+        next_end = float(candidate.get("end", next_start))
+
+        gap = next_start - prev_end
+        same_speaker = previous.get("speaker") == candidate.get("speaker")
+        prev_short = active.too_short(prev_text, prev_end - prev_start)
+        next_short = active.too_short(next_text, next_end - next_start)
+
+        combined_text = (
+            join_tokens([prev_text, next_text])
+            if is_cjk_text(prev_text) and is_cjk_text(next_text)
+            else f"{prev_text} {next_text}"
+        )
+        combined_text = re.sub(r"\s+", " ", combined_text.replace("\n", " ")).strip()
+
+        should_merge = (
+            same_speaker
+            and gap <= active.merge_gap
+            and (prev_short or next_short)
+            # A finished sentence that already reads comfortably stays its own
+            # cue; only a fragment gets pulled across the full stop.
+            and not (_ends_sentence(prev_text) and not prev_short)
+            and active.fits(combined_text, next_end - prev_start)
+        )
+        if not should_merge:
+            merged.append(candidate)
+            continue
+
+        previous["text"] = balance_lines(combined_text, max_lines=active.max_lines)
+        previous["end"] = round(next_end, 3)
+        prev_translation = str(previous.get("translation", "")).strip()
+        next_translation = str(candidate.get("translation", "")).strip()
+        if prev_translation or next_translation:
+            previous["translation"] = balance_lines(
+                " ".join(part for part in (prev_translation, next_translation) if part),
+                max_lines=active.max_lines,
+            )
+
+    for index, cue in enumerate(merged, start=1):
+        cue["id"] = index
+    return merged
+
+
+def enforce_cue_timing(
+    cues: Iterable[dict],
+    style: CueStyle | None = None,
+    media_duration: float | None = None,
+) -> list[dict]:
+    """Give every cue a floor duration, borrowing only from real silence.
+
+    A cue that leaves the screen in 0.6s cannot be read no matter how short the
+    line is. The time is taken from the gap after it (or before it) and never
+    from a neighbour, so timings stay honest to the audio.
+    """
+
+    result = [dict(cue) for cue in cues]
+    for index, cue in enumerate(result):
+        active = style or style_for_text(str(cue.get("text", "")))
+        start = float(cue.get("start", 0.0))
+        end = max(float(cue.get("end", start)), start)
+        if end - start >= active.min_duration:
+            continue
+
+        ceiling = (
+            float(result[index + 1]["start"]) - active.min_gap
+            if index + 1 < len(result)
+            else (media_duration if media_duration is not None else start + active.min_duration)
+        )
+        end = max(end, min(start + active.min_duration, ceiling))
+
+        if end - start < active.min_duration:
+            floor = (
+                float(result[index - 1]["end"]) + active.min_gap
+                if index > 0
+                else 0.0
+            )
+            start = min(start, max(floor, end - active.min_duration))
+
+        cue["start"] = round(max(start, 0.0), 3)
+        cue["end"] = round(max(end, cue["start"] + 0.12), 3)
+
+    return result
 
 
 

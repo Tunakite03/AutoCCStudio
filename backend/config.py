@@ -47,6 +47,27 @@ def _float_env(name: str, default: float) -> float:
         return default
 
 
+def parse_api_keys(raw: str) -> tuple[str, ...]:
+    """Read one *or many* API keys out of a single env value.
+
+    `.env` has no list type, so a pool is written the way a person would write
+    one: `LLM_API_KEY=[key-a, key-b]`. A lone key stays a lone key.
+
+    Duplicates are dropped: the same credential listed twice is one quota
+    pretending to be two, and it would take a rotation slot from a real key.
+    """
+
+    text = raw.strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    keys: list[str] = []
+    for chunk in text.replace("\n", ",").replace(";", ",").split(","):
+        key = chunk.strip().strip('"').strip("'").strip()
+        if key and key not in keys:
+            keys.append(key)
+    return tuple(keys)
+
+
 @dataclass(frozen=True)
 class Settings:
     transcription_provider: str = getenv("TRANSCRIPTION_PROVIDER", "faster_whisper")
@@ -90,6 +111,17 @@ class Settings:
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def llm_api_keys(self) -> tuple[str, ...]:
+        """Every LLM key configured, in the order they were written.
+
+        Derived rather than stored so `dataclasses.replace(settings, ...)` — how
+        the tests and every override path build a variant — cannot leave the raw
+        value and the parsed pool disagreeing.
+        """
+
+        return parse_api_keys(self.llm_api_key)
 
 
 settings = Settings()

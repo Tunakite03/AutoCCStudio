@@ -36,9 +36,9 @@ export async function refreshProjects() {
 const isTranslated = (project) =>
   project.cue_count > 0 && project.translated_count >= project.cue_count;
 
-/** Anything a person would want to look at again: failed, empty, or still running. */
+/** Anything a person would want to look at again: failed, stopped, empty, or still running. */
 const needsAttention = (project) =>
-  project.status === "error" || project.status === "processing" || project.cue_count === 0;
+  ["error", "processing", "cancelled"].includes(project.status) || project.cue_count === 0;
 
 function visibleProjects() {
   const needle = search.trim().toLowerCase();
@@ -87,6 +87,7 @@ function renderStats() {
 function statusOf(project) {
   if (project.status === "processing") return { label: "Đang xử lý", tone: "busy" };
   if (project.status === "error") return { label: "Lỗi", tone: "error" };
+  if (project.status === "cancelled") return { label: "Đã dừng", tone: "idle" };
   if (!project.cue_count) return { label: "Chưa có cue", tone: "idle" };
   if (isTranslated(project)) return { label: "Đã dịch", tone: "done" };
   return { label: "Chưa dịch", tone: "idle" };

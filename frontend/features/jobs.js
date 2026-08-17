@@ -49,13 +49,34 @@ function renderProgress(job) {
   const processing = job.status === "processing";
   $("#progress-rail").classList.toggle("hidden", !processing);
   if (!processing) return;
-  $("#progress-copy").textContent =
-    job.kind === "transcription" && !cues().length
+
+  // The stop is cooperative: the worker lands on it at its next checkpoint, and
+  // a provider call already in flight has to return first. Saying so is the
+  // difference between "the button did nothing" and "it is finishing a step".
+  const stopping = Boolean(job.cancel_requested);
+  $("#progress-copy").textContent = stopping
+    ? "Đang dừng… chờ bước đang chạy kết thúc"
+    : job.kind === "transcription" && !cues().length
       ? "AI đang nghe audio và dựng timestamp…"
       : job.speaker_analysis_status === "processing"
         ? "AI đang phân tích ngữ cảnh và tách lượt thoại…"
         : "AI đang dịch từng cue…";
-  setStatus("Đang xử lý", "busy");
+  $("#cancel-job-btn").disabled = stopping;
+  $("#cancel-job-label").textContent = stopping ? "Đang dừng…" : "Hủy";
+  setStatus(stopping ? "Đang dừng" : "Đang xử lý", "busy");
+}
+
+async function cancelRun() {
+  const job = state.job;
+  if (!job || job.status !== "processing" || job.cancel_requested) return;
+  $("#cancel-job-btn").disabled = true;
+  try {
+    adoptJob(await api.cancel(job.id), { keepSelection: true });
+    toast("Đã yêu cầu dừng — chờ bước đang chạy kết thúc", "success");
+  } catch (error) {
+    $("#cancel-job-btn").disabled = false;
+    reportError(error);
+  }
 }
 
 async function loadWaveform(jobId) {
@@ -123,6 +144,7 @@ export function watchJob(jobId) {
 
     adoptJob(job, { keepSelection: job.status === "processing" });
     if (job.status === "completed") onJobCompleted(job);
+    else if (job.status === "cancelled") onJobCancelled(job);
     else if (job.status === "error") {
       stopEvents();
       reportError(new Error(job.error || "Job thất bại"));
@@ -132,6 +154,19 @@ export function watchJob(jobId) {
   source.onerror = () => {
     if (eventSource === source) setStatus("Mất kết nối SSE, đang thử lại…", "busy");
   };
+}
+
+/** A stop is not a failure: whatever the worker had already saved is now the
+ *  project, and the pipeline buttons are the way back in. */
+function onJobCancelled(job) {
+  stopEvents();
+  resetHistory();
+  setSaveState("Đã lưu", "saved");
+  const translated = job.cues.filter((cue) => (cue.translation || "").trim()).length;
+  const kept = translated ? `${translated}/${job.cues.length} cue đã dịch được giữ lại` : `${job.cues.length} cue`;
+  setStatus(`Đã dừng · ${kept}`);
+  toast(`Đã dừng tiến trình · ${kept}`, "success");
+  if (isVideoReady()) timeline.fit();
 }
 
 function onJobCompleted(job) {
@@ -206,5 +241,6 @@ export async function restoreLastJob() {
 export function mountJobs() {
   on("cues:changed", queueSave);
   on("cue:patched", queueSave);
+  $("#cancel-job-btn").addEventListener("click", cancelRun);
   window.addEventListener("beforeunload", stopEvents);
 }

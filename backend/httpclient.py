@@ -12,6 +12,8 @@ from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
+from .apikeys import CredentialPool
+from .cancellation import raise_if_stopped
 from .config import get_logger, settings
 
 logger = get_logger("http")
@@ -19,6 +21,12 @@ logger = get_logger("http")
 # Transient by nature: the provider is rate-limiting us or briefly unavailable.
 RETRYABLE_STATUS = frozenset({408, 429, 500, 502, 503, 504})
 RATE_LIMITED_STATUS = 429
+# One bad key in a pool of eight should not kill every eighth request. These are
+# not retried on the same key — they are the provider saying "not this one".
+KEY_REJECTED_STATUS = frozenset({401, 403})
+# Long enough to mean "until you fix .env and restart", short enough that a
+# provider having a bad minute does not lose the key for the session.
+KEY_REJECTED_COOLDOWN_SECONDS = 300.0
 BACKOFF_BASE_SECONDS = 1.5
 # A rate limit clears on the provider's schedule, not ours, so it gets its own
 # budget: waiting seconds like a flaky connection just spends every retry before
@@ -34,6 +42,9 @@ RETRY_AFTER_HEADERS = (
     "x-ratelimit-reset-after",
     "ratelimitbysize-reset",
 )
+# A wait is served in slices this long so a stopped job does not have to sit
+# through the rest of a minute-long backoff before anything notices.
+STOP_CHECK_INTERVAL_SECONDS = 0.5
 
 
 class HTTPClientError(RuntimeError):
@@ -55,8 +66,20 @@ def _requests():
     return requests
 
 
+def _wait(seconds: float) -> None:
+    """Sleep, but in slices, checking for a stop request between them."""
+
+    deadline = time.monotonic() + max(0.0, seconds)
+    while True:
+        raise_if_stopped()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(remaining, STOP_CHECK_INTERVAL_SECONDS))
+
+
 def _sleep_for_attempt(attempt: int) -> None:
-    time.sleep(BACKOFF_BASE_SECONDS * (2**attempt))
+    _wait(BACKOFF_BASE_SECONDS * (2**attempt))
 
 
 def _retry_after_seconds(response) -> float | None:
@@ -87,6 +110,19 @@ def _retry_after_seconds(response) -> float | None:
     return None
 
 
+def _pool_exhausted(label: str, credentials, tried: int, detail: str) -> HTTPClientError:
+    """The one condition worth stopping a job for: no key left to try, now."""
+
+    logger.warning("%s: all %s API keys stayed rate limited", label, len(credentials))
+    return HTTPClientError(
+        f"Cả {len(credentials)} API key của {label} đều đang bị giới hạn tốc độ "
+        f"(HTTP 429) sau {tried} lần thử. Hãy đợi hạn mức hồi lại rồi chạy tiếp, "
+        f"hoặc thêm key mới vào .env: {detail}",
+        status_code=RATE_LIMITED_STATUS,
+        body=detail,
+    )
+
+
 def _rate_limit_delay(response, already_waited: int) -> float:
     requested = _retry_after_seconds(response)
     if requested is None:
@@ -104,6 +140,7 @@ def post(
     json_body: Any = None,
     body_factory: Callable[[], Iterator[bytes] | Any] | None = None,
     retries: int | None = None,
+    credentials: CredentialPool | None = None,
 ):
     """POST with bounded retries on transient failures.
 
@@ -114,20 +151,57 @@ def post(
     one budget with connection errors meant a rate limit was given a couple of
     seconds to clear and then reported as a hard failure, which for a per-minute
     quota it never was.
+
+    `credentials` turns that wait into a rotation: the limited key is put on a
+    cooldown of its own and the next request goes out under a different one
+    immediately. Waiting only happens when *every* key is cooling at the same
+    moment, and even then no key is written off — the pool hands back whichever
+    recovers first, which is usually the one limited earliest.
     """
 
     requests = _requests()
     attempts = max(0, retries if retries is not None else settings.http_retries) + 1
     rate_limit_attempts = max(0, settings.http_rate_limit_retries) + 1
+    pooled = credentials is not None and len(credentials) > 0
+    # Each key gets the full budget: with a pool a 429 costs a rotation rather
+    # than a wait, and rotations must not spend the waits.
+    rate_limit_budget = rate_limit_attempts * (len(credentials) if pooled else 1)
     used = 1
     rate_limited = 0
+    # Waits keep their own budget, separate from rotations. Sharing one would
+    # make a single-key install give up in half the attempts it does today, and
+    # an eight-key one wait eight times as long before reporting anything.
+    waited = 0
+    rejected = 0
+    detail = ""
 
     while True:
+        raise_if_stopped()
+        key = None
+        request_headers = headers
+        if pooled:
+            key, cooldown = credentials.acquire()
+            if key is None:
+                # Every key is limited at the same moment — the only situation
+                # worth waiting for, since each one recovers on its own clock.
+                if waited >= rate_limit_attempts:
+                    raise _pool_exhausted(label, credentials, rate_limited, detail)
+                waited += 1
+                delay = min(cooldown, RATE_LIMIT_MAX_SECONDS)
+                logger.warning(
+                    "%s: all %s API keys are rate limited, waiting %.1fs (%s/%s) "
+                    "for the first to recover",
+                    label, len(credentials), delay, waited, rate_limit_attempts,
+                )
+                _wait(delay)
+                continue
+            request_headers = {**headers, **credentials.authorization(key)}
+
         payload = body_factory() if body_factory is not None else data
         try:
             response = requests.post(
                 url,
-                headers=headers,
+                headers=request_headers,
                 data=payload,
                 json=json_body,
                 timeout=timeout,
@@ -146,23 +220,54 @@ def post(
             ) from exc
 
         if response.ok:
+            if key is not None:
+                credentials.release(key)
             return response
 
         detail = response.text.strip()[-1000:] or response.reason
         if response.status_code == RATE_LIMITED_STATUS:
-            if rate_limited + 1 < rate_limit_attempts:
-                delay = _rate_limit_delay(response, rate_limited)
-                rate_limited += 1
+            rate_limited += 1
+            if key is not None:
+                # The key's own strike count drives its backoff, so one struggling
+                # key does not lengthen the cooldown of the others.
+                delay = _rate_limit_delay(response, credentials.strikes(key))
+                credentials.penalise(key, delay)
+                if rate_limited < rate_limit_budget:
+                    logger.warning(
+                        "%s rate limited on key %s (%s/%s), cooling it %.1fs and rotating",
+                        label, credentials.label(key), rate_limited, rate_limit_budget, delay,
+                    )
+                    continue
+                raise _pool_exhausted(label, credentials, rate_limited, detail)
+            if rate_limited < rate_limit_budget:
+                delay = _rate_limit_delay(response, rate_limited - 1)
                 logger.warning(
                     "%s rate limited (attempt %s/%s), waiting %.1fs",
-                    label, rate_limited, rate_limit_attempts, delay,
+                    label, rate_limited, rate_limit_budget, delay,
                 )
-                time.sleep(delay)
+                _wait(delay)
                 continue
             logger.warning("%s stayed rate limited: %s", label, detail)
             raise HTTPClientError(
-                f"{label} vẫn giới hạn tốc độ (HTTP 429) sau {rate_limit_attempts} "
+                f"{label} vẫn giới hạn tốc độ (HTTP 429) sau {rate_limit_budget} "
                 f"lần thử: {detail}",
+                status_code=response.status_code,
+                body=detail,
+            )
+
+        if key is not None and response.status_code in KEY_REJECTED_STATUS:
+            rejected += 1
+            credentials.reject(key, KEY_REJECTED_COOLDOWN_SECONDS)
+            if rejected < len(credentials):
+                logger.warning(
+                    "%s rejected key %s (HTTP %s), dropping it from rotation: %s",
+                    label, credentials.label(key), response.status_code, detail,
+                )
+                continue
+            logger.warning("%s rejected every API key it was given", label)
+            raise HTTPClientError(
+                f"{label} từ chối cả {len(credentials)} API key (HTTP "
+                f"{response.status_code}). Kiểm tra lại LLM_API_KEY trong .env: {detail}",
                 status_code=response.status_code,
                 body=detail,
             )

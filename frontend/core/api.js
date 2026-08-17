@@ -39,7 +39,16 @@ export const api = {
     request(`/api/jobs/${jobId}/split-long-cues`, { method: "POST" }),
 
 
-  translate: (jobId, targetLanguage, style = "auto", styleNotes = "", provider = "", model = "") =>
+  /** `fromCue` is 0-based; cues before it keep the translation they already have. */
+  translate: (
+    jobId,
+    targetLanguage,
+    style = "auto",
+    styleNotes = "",
+    provider = "",
+    model = "",
+    fromCue = 0,
+  ) =>
     request(`/api/jobs/${jobId}/translate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -49,8 +58,12 @@ export const api = {
         style_notes: styleNotes,
         provider,
         model,
+        from_cue: fromCue,
       }),
     }),
+
+  /** Ask the worker to stop. It lands at its next checkpoint, not instantly. */
+  cancel: (jobId) => request(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
 
   saveCues: (jobId, cues) =>
     request(`/api/jobs/${jobId}/cues`, {

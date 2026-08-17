@@ -20,6 +20,9 @@ STATUS_PROCESSING = "processing"
 STATUS_COMPLETED = "completed"
 STATUS_READY = "ready"
 STATUS_ERROR = "error"
+# Its own status, not an error: a stopped run keeps everything it had already
+# written, and the UI must not offer to "retry" it as if something broke.
+STATUS_CANCELLED = "cancelled"
 
 KIND_TRANSCRIPTION = "transcription"
 KIND_SUBTITLE_IMPORT = "subtitle_import"
@@ -77,6 +80,9 @@ def new_job(
         "status": STATUS_PROCESSING if kind == KIND_TRANSCRIPTION else STATUS_READY,
         "error": None,
         "progress": None,
+        # Raised by a request, lowered by the worker that honours it. A thread
+        # cannot be killed from outside, so stopping is always cooperative.
+        "cancel_requested": False,
         "video_name": video_name,
         "subtitle_name": subtitle_name,
         "video_path": None,
@@ -123,6 +129,9 @@ def public_job(job: dict) -> dict:
         "status": job["status"],
         "error": job.get("error"),
         "progress": job.get("progress"),
+        # Public because it is the whole "Đang dừng…" state: the request landed,
+        # the worker has not reached its next checkpoint yet.
+        "cancel_requested": bool(job.get("cancel_requested")),
         "video_name": job.get("video_name"),
         "subtitle_name": job.get("subtitle_name"),
         "video_available": bool(job.get("video_path")),
