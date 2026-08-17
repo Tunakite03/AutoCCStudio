@@ -109,7 +109,9 @@ jobs:
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          # Đổi sang `key: ${{ secrets.VM_SSH_KEY }}` nếu chuyển sang xác thực
+          # bằng SSH key (xem DEPLOY.md mục 2).
+          password: ${{ secrets.VM_SSH_PASSWORD }}
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           source: docker-compose.prod.yml
           target: ${{ vars.DEPLOY_PATH || '/opt/autocc' }}
@@ -126,7 +128,7 @@ jobs:
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          password: ${{ secrets.VM_SSH_PASSWORD }}
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           envs: AUTOCC_IMAGE,GHCR_USER,GHCR_TOKEN,DEPLOY_PATH
           script_stop: true
@@ -154,7 +156,7 @@ jobs:
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          password: ${{ secrets.VM_SSH_PASSWORD }}
           port: ${{ secrets.VM_SSH_PORT || 22 }}
           envs: DEPLOY_PATH
           script_stop: true

@@ -286,6 +286,10 @@ mỗi batch xong đều được lưu lại, nên một batch hỏng ở phút t
 - Dịch AI cần LLM endpoint đang chạy và có thể cần điều chỉnh prompt/model cho thuật ngữ chuyên ngành.
 - Deepgram là dịch vụ cloud: cần API key, có chi phí theo thời lượng và video được gửi ra ngoài máy.
 
+## Deploy
+
+Push lên `main` là tự động deploy lên VM: CI chạy test, build Docker image, đẩy lên GHCR rồi SSH vào VM pull và restart. Các bước cấu hình một lần (SSH key, secrets, NSG) nằm ở [DEPLOY.md](DEPLOY.md).
+
 ## License
 
 Dự án được phân phối dưới giấy phép [MIT License](LICENSE).
