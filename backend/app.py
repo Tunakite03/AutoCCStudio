@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -33,6 +34,36 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="AutoCC", version="0.1.0", lifespan=lifespan)
+
+
+# Routes whose bytes must not pass through the compressor. The event stream has
+# to reach the browser one event at a time instead of sitting in a compression
+# buffer, and the media routes serve already-compressed bytes — often as Range
+# requests, where re-encoding the body buys nothing and complicates the offsets.
+_UNCOMPRESSED = ("/events", "/video", "/thumbnail", "/mux")
+
+
+class SelectiveGZipMiddleware:
+    """GZipMiddleware, restricted to the responses that gain from it.
+
+    Starlette's version compresses whatever it is handed, which is the wrong
+    default here: this app streams both SSE and video through the same stack.
+    """
+
+    def __init__(self, app, *, minimum_size: int) -> None:
+        self.app = app
+        self.compressing_app = GZipMiddleware(app, minimum_size=minimum_size)
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http" and not scope["path"].endswith(_UNCOMPRESSED):
+            await self.compressing_app(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+# Registered before CORS so that CORS ends up the outer layer: middleware added
+# later wraps middleware added earlier.
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=settings.gzip_minimum_size)
 
 # The bundled frontend is served from this same origin, so CORS only needs to
 # cover a separately hosted dev frontend. A wildcard would let any website the
@@ -64,15 +95,25 @@ app.include_router(media_api.router)
 
 
 class RevalidatingStaticFiles(StaticFiles):
-    """Serve the frontend with `no-cache`.
+    """Serve the frontend under an explicit cache policy.
 
-    Without it the browser keeps ES modules from its heuristic cache and an edited
-    file silently does not load on reload. Revalidation costs one 304 locally.
+    `no-cache` is the default because development needs it: without it the
+    browser keeps ES modules from its heuristic cache and an edited file
+    silently does not load on reload. Revalidation costs one 304 locally.
+
+    `STATIC_CACHE_SECONDS` trades those round trips for real caching on a
+    deployment. The entry document stays on `no-cache` regardless — asset names
+    carry no content hash, so the HTML is the only file that could ever point a
+    returning browser at something new.
     """
 
     def file_response(self, *args, **kwargs) -> Response:
         response = super().file_response(*args, **kwargs)
-        response.headers["Cache-Control"] = "no-cache"
+        seconds = settings.static_cache_seconds
+        is_document = response.headers.get("content-type", "").startswith("text/html")
+        response.headers["Cache-Control"] = (
+            f"public, max-age={seconds}" if seconds > 0 and not is_document else "no-cache"
+        )
         return response
 
 

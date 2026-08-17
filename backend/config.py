@@ -107,6 +107,13 @@ class Settings:
     # A rate limit needs to be waited out, not retried a couple of times, so it
     # gets a budget of its own.
     http_rate_limit_retries: int = _int_env("HTTP_RATE_LIMIT_RETRIES", 5)
+    # How long a browser may reuse a frontend file without asking. 0 keeps the
+    # `no-cache` revalidation that development needs. Asset names carry no
+    # content hash, so a non-zero value means an update stays invisible for that
+    # long — set it only on a deployment you redeploy deliberately.
+    static_cache_seconds: int = _int_env("STATIC_CACHE_SECONDS", 0)
+    # Below this, the gzip header costs more than the compression saves.
+    gzip_minimum_size: int = _int_env("GZIP_MINIMUM_SIZE", 800)
 
     @property
     def max_upload_bytes(self) -> int:

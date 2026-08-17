@@ -113,7 +113,15 @@ def stream_job_video(job_id: str, request: Request) -> Response:
     path = _job_video_path(job_id)
     file_size = path.stat().st_size
     media_type = mimetypes.guess_type(path.name)[0] or "video/mp4"
-    common_headers = {"Accept-Ranges": "bytes", "Cache-Control": "no-store"}
+    # X-Accel-Buffering: a reverse proxy that buffers this spools the whole
+    # range to disk before the player sees a byte, which turns seeking in a
+    # multi-gigabyte file into a wait. Declaring it here keeps the deployment's
+    # proxy config free of per-route exceptions.
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+    }
 
     range_header = request.headers.get("range")
     if not range_header:

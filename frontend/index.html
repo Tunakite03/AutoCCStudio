@@ -10,6 +10,30 @@
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23141518'/%3E%3Crect x='12' y='18' width='40' height='28' rx='6' fill='none' stroke='%23f0b429' stroke-width='4'/%3E%3Cpath d='M21 30h9M21 37h16' stroke='%23f0b429' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/styles.css" />
   <script type="module" src="/app.js"></script>
+
+  <!-- app.js imports features, features import core: without these the browser
+       discovers the graph one level at a time and pays three round trips before
+       the last module arrives. Preloading flattens that into one wave.
+       tests/test_frontend_assets.py fails if a module here is missing. -->
+  <link rel="modulepreload" href="/core/api.js" />
+  <link rel="modulepreload" href="/core/confirm.js" />
+  <link rel="modulepreload" href="/core/dom.js" />
+  <link rel="modulepreload" href="/core/feedback.js" />
+  <link rel="modulepreload" href="/core/format.js" />
+  <link rel="modulepreload" href="/core/router.js" />
+  <link rel="modulepreload" href="/core/store.js" />
+  <link rel="modulepreload" href="/features/cuelist.js" />
+  <link rel="modulepreload" href="/features/dashboard.js" />
+  <link rel="modulepreload" href="/features/editing.js" />
+  <link rel="modulepreload" href="/features/history.js" />
+  <link rel="modulepreload" href="/features/inspector.js" />
+  <link rel="modulepreload" href="/features/jobs.js" />
+  <link rel="modulepreload" href="/features/keymap.js" />
+  <link rel="modulepreload" href="/features/pipeline.js" />
+  <link rel="modulepreload" href="/features/shell.js" />
+  <link rel="modulepreload" href="/features/timeline-view.js" />
+  <link rel="modulepreload" href="/features/transport.js" />
+  <link rel="modulepreload" href="/lib/timeline-engine.js" />
 </head>
 
 <body>
