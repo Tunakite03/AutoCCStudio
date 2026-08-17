@@ -51,30 +51,46 @@ STATIC_CACHE_SECONDS=3600
 > Nhưng asset không có content hash trong tên, nên sau mỗi deploy phải hard
 > refresh — cân nhắc trước khi đặt số lớn.
 
-## 2. Xác thực SSH (Mật khẩu hoặc SSH Key)
+## 2. Xác thực SSH (SSH Key)
 
-Mặc định workflow [ci.yml](.github/workflows/ci.yml) đang dùng **mật khẩu** (`VM_SSH_PASSWORD`). Bạn chỉ cần khai báo mật khẩu của user VM vào GitHub Secrets.
+Workflow [ci.yml](.github/workflows/ci.yml) dùng **SSH key** (`VM_SSH_KEY`). Tạo một cặp key riêng cho CI, đừng dùng lại key cá nhân — lộ thì thu hồi bằng cách xoá một dòng trong `authorized_keys`, không ảnh hưởng máy nào khác.
 
-Trước đó phải chắc VM cho phép đăng nhập bằng mật khẩu — VM Azure tạo bằng SSH key mặc định tắt tuỳ chọn này, và workflow sẽ fail ngay ở bước SSH với lỗi `Permission denied (publickey)`:
+Trên máy Windows của bạn:
 
-```bash
-sudo sshd -T | grep -i passwordauthentication
+```powershell
+ssh-keygen -t ed25519 -C "github-actions-autocc" -f "$env:USERPROFILE\.ssh\autocc_deploy" -N '""'
 ```
 
-Nếu kết quả là `no`, bật lên (Azure hay ghi đè cấu hình trong `sshd_config.d/`, nên phải sửa cả hai chỗ):
+Nạp public key lên VM (Windows không có `ssh-copy-id`):
+
+```powershell
+$key = (Get-Content "$env:USERPROFILE\.ssh\autocc_deploy.pub" -Raw).Trim()
+ssh <user>@<ip-vm> "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '$key' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+```
+
+Thử đăng nhập bằng key trước khi push — bước này không thông thì workflow cũng không thông:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\autocc_deploy" -o IdentitiesOnly=yes <user>@<ip-vm> "echo ok"
+```
+
+Copy **private key** vào clipboard để dán vào secret `VM_SSH_KEY` ở mục 3 (phải có cả dòng `BEGIN`/`END`):
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\autocc_deploy" -Raw | Set-Clipboard
+```
+
+Sau khi deploy bằng key chạy được, nên tắt hẳn đăng nhập bằng mật khẩu trên VM — cổng 22 công khai luôn bị bot dò mật khẩu:
 
 ```bash
-sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-sudo grep -rl PasswordAuthentication /etc/ssh/sshd_config.d/ | xargs -r sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/'
+sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sudo grep -rl PasswordAuthentication /etc/ssh/sshd_config.d/ | xargs -r sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/'
 sudo systemctl restart ssh
 ```
 
-> Mở password auth trên port 22 công khai nghĩa là VM sẽ bị bot dò mật khẩu liên tục. Tối thiểu nên đặt mật khẩu dài, ngẫu nhiên và cài `fail2ban` (`sudo apt install -y fail2ban`). Không whitelist IP runner GitHub được vì dải IP của họ rất rộng và thay đổi thường xuyên.
+> Azure hay đặt override trong `/etc/ssh/sshd_config.d/`, file đó thắng `sshd_config`, nên phải sửa cả hai chỗ. Kiểm tra kết quả thật bằng `sudo sshd -T | grep -i passwordauthentication`. Giữ sẵn một phiên SSH đang mở khi restart `ssh`, phòng khi cấu hình sai thì còn đường vào.
 
-*(Tuỳ chọn nếu muốn dùng SSH Key thay vì Mật khẩu)*:
-1. Tạo key: `ssh-keygen -t ed25519 -C "github-actions-autocc" -f ~/.ssh/autocc_deploy -N ""`
-2. Copy lên VM: `ssh-copy-id -i ~/.ssh/autocc_deploy.pub <user>@<ip-vm>`
-3. Đổi dòng `password: ${{ secrets.VM_SSH_PASSWORD }}` trong `ci.yml` thành `key: ${{ secrets.VM_SSH_KEY }}`.
+*(Nếu muốn quay lại dùng mật khẩu)*: đổi cả 3 dòng `key: ${{ secrets.VM_SSH_KEY }}` trong `ci.yml` thành `password: ${{ secrets.VM_SSH_PASSWORD }}`, và bật lại `PasswordAuthentication yes` trên VM.
 
 ## 3. Khai báo secrets & variables trên GitHub
 
@@ -84,7 +100,7 @@ sudo systemctl restart ssh
 |---|---|---|
 | Secret | `VM_HOST` | IP public hoặc DNS của VM |
 | Secret | `VM_USER` | user SSH (thường là `azureuser`) |
-| Secret | `VM_SSH_PASSWORD` | Mật khẩu đăng nhập của Azure VM |
+| Secret | `VM_SSH_KEY` | private key `autocc_deploy` ở mục 2, cả dòng `BEGIN`/`END` |
 | Secret | `VM_SSH_PORT` | *(tuỳ chọn)* cổng SSH nếu khác `22` |
 | Variable | `DEPLOY_PATH` | *(tuỳ chọn)* đường dẫn khác `/opt/autocc` |
 
