@@ -41,7 +41,8 @@ def test_notes_split_into_terms_and_rules():
 def test_a_users_own_term_overrides_the_preset():
     brief = style.build_style_brief("han_viet", "zh", "大哥 → anh đại")
     assert brief.glossary()["大哥"] == "anh đại"
-    assert "Giọng trẻ" not in " ".join(brief.rules)
+    # And no other preset's rules came along for the ride.
+    assert "fansub" not in " ".join(brief.rules)
 
 
 def test_free_text_notes_become_extra_rules():

@@ -1,12 +1,25 @@
 /** Every backend call in one place — the only module that knows a URL shape. */
 
+import { t, tm } from "./i18n.js";
+
+/**
+ * What went wrong, in this locale.
+ *
+ * The backend sends `detail` as `{code, params}`, so the sentence is written
+ * here rather than there. FastAPI's own validation errors arrive as a list and
+ * mean nothing to a user, so those fall back to the status code.
+ */
+function failureText(body, status) {
+  const detail = body !== null && typeof body === "object" ? body.detail : body;
+  if (Array.isArray(detail)) return t("err.http", { status });
+  return tm(detail) || t("err.http", { status });
+}
+
 async function request(url, options = {}) {
   const response = await fetch(url, options);
   const type = response.headers.get("content-type") || "";
   const body = type.includes("application/json") ? await response.json() : await response.text();
-  if (!response.ok) {
-    throw new Error((typeof body === "object" ? body.detail : body) || `Lỗi ${response.status}`);
-  }
+  if (!response.ok) throw new Error(failureText(body, response.status));
   return body;
 }
 
@@ -76,7 +89,7 @@ export const api = {
     const response = await fetch(`/api/jobs/${jobId}/mux`, { method: "POST" });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || "Không ghép được phụ đề vào video");
+      throw new Error(tm(body.detail, "err.muxFailed"));
     }
     return response.blob();
   },

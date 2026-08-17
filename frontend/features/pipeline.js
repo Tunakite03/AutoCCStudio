@@ -8,6 +8,7 @@ import { api } from "../core/api.js";
 import { confirmAction } from "../core/confirm.js";
 import { reportError, setStatus, toast } from "../core/feedback.js";
 import { formatFileSize } from "../core/format.js";
+import { optionLabel, t, tm } from "../core/i18n.js";
 import { cues, hasCues, isProcessing, on, onAny, setCapabilities, state } from "../core/store.js";
 import { adoptJob, bindPreviewToJob, noteLocalPreview, stopEvents, watchJob } from "./jobs.js";
 import { timeline } from "./timeline-view.js";
@@ -27,11 +28,13 @@ function renderSourceSlot() {
   const label = file
     ? `${file.name} · ${formatFileSize(file.size)}`
     : serverVideoReady()
-      ? `${state.job.video_name || "video"} · đã lưu trên máy chủ`
-      : "Kéo thả hoặc bấm chọn · MP4, MOV, MKV";
+      ? t("source.videoOnServer", { name: state.job.video_name || "video" })
+      : t("source.videoHint");
   $("#video-name").textContent = label;
   $("#video-drop").classList.toggle("has-file", Boolean(file) || serverVideoReady());
-  $("#transcribe-label").textContent = serverVideoReady() ? "Chạy lại nhận dạng" : "Tạo phụ đề";
+  $("#transcribe-label").textContent = t(
+    serverVideoReady() ? "action.retranscribe" : "action.transcribe",
+  );
 }
 
 export function acceptVideoFile(file) {
@@ -43,7 +46,7 @@ export function acceptVideoFile(file) {
   renderSourceSlot();
   showLocalPreview(file);
   noteLocalPreview();
-  setStatus("Đã nạp video — xem trước sẵn sàng");
+  setStatus(t("status.videoLoaded"));
   refreshButtons();
 }
 
@@ -51,13 +54,14 @@ export async function importSubtitleFile(file) {
   $("#subtitle-name").textContent = `${file.name} · ${formatFileSize(file.size)}`;
   $("#subtitle-drop").classList.add("has-file");
   try {
-    setStatus("Đang nhập phụ đề…", "busy");
+    setStatus(t("status.importingSubtitle"), "busy");
     const job = await api.importSubtitle(file);
     stopEvents();
     adoptJob(job);
     timeline.fit();
-    setStatus(`Đã nhập ${job.cues.length} cue`);
-    toast(`Đã nhập ${job.cues.length} cue`, "success");
+    const imported = t("status.importedCues", { count: job.cues.length });
+    setStatus(imported);
+    toast(imported, "success");
   } catch (error) {
     reportError(error);
   }
@@ -97,23 +101,21 @@ function unsetLanguageReason() {
 function languageWarning(reason) {
   const deepgram = $("#transcription-provider")?.value === "deepgram";
   const engine = deepgram ? "Deepgram" : "Whisper";
-  const detail = deepgram
-    ? "Deepgram sẽ tự dò ngôn ngữ (detect_language) và áp một ngôn ngữ duy nhất cho cả file. Audio ngắn, nhiễu hoặc pha trộn nhiều thứ tiếng rất dễ bị dò sai."
-    : "Whisper dò ngôn ngữ từ đoạn audio đầu tiên rồi áp cho toàn bộ video. Nếu mở đầu là nhạc, im lặng hay tiếng nước ngoài thì cả bản nhận dạng sẽ lệch theo.";
+  const detail = t(deepgram ? "guard.deepgramDetail" : "guard.whisperDetail");
 
   if (reason === "multi") {
     return {
-      title: "Chế độ đa ngôn ngữ không chạy trên Whisper",
-      hint: "“Đa ngôn ngữ” chỉ có trên Deepgram Nova-3 — Whisper sẽ chạy như tự nhận diện.",
-      note: `Tùy chọn “Đa ngôn ngữ (Nova-3 Multilingual)” là chế độ riêng của Deepgram. Với ${engine} phía backend sẽ bỏ qua và chạy như tự nhận diện.\n\n${detail}\n\nĐổi engine sang Deepgram, hoặc chọn đúng ngôn ngữ audio để có kết quả sát nhất.`,
-      confirmLabel: "Vẫn chạy",
+      title: t("guard.multiTitle"),
+      hint: t("guard.multiHint"),
+      note: t("guard.multiNote", { engine, detail }),
+      confirmLabel: t("guard.multiConfirm"),
     };
   }
   return {
-    title: "Chưa chọn ngôn ngữ audio",
-    hint: "Đang để Tự nhận diện — chọn đúng ngôn ngữ audio sẽ nhanh và chính xác hơn.",
-    note: `Chỉ định đúng ngôn ngữ audio của video (Tiếng Việt, English…) giúp AI nhận dạng nhanh và chính xác hơn đáng kể.\n\n${detail}`,
-    confirmLabel: "Tiếp tục tự nhận diện",
+    title: t("guard.autoTitle"),
+    hint: t("guard.autoHint"),
+    note: t("guard.autoNote", { detail }),
+    confirmLabel: t("guard.autoConfirm"),
   };
 }
 
@@ -162,13 +164,13 @@ async function confirmLanguageSelection() {
   const warning = languageWarning(reason);
   const engine = $("#transcription-provider")?.value === "deepgram" ? "Deepgram" : "Whisper";
   const select = $("#source-language");
-  const chosen = select?.options[select.selectedIndex]?.textContent.trim() || "Tự nhận diện";
+  const chosen = select?.options[select.selectedIndex]?.textContent.trim() || t("lang.auto");
   const confirmed = await confirmAction({
     title: warning.title,
-    target: `${engine} · ${$("#transcription-model")?.value || "model mặc định"} · ${chosen}`,
+    target: `${engine} · ${$("#transcription-model")?.value || t("guard.defaultModel")} · ${chosen}`,
     note: warning.note,
     confirmLabel: warning.confirmLabel,
-    cancelLabel: "Chọn lại ngôn ngữ",
+    cancelLabel: t("guard.pickLanguageAgain"),
     variant: "warning",
   });
   if (!confirmed) {
@@ -188,11 +190,11 @@ export async function transcribe() {
   const form = engineForm();
   form.append("video", file);
   try {
-    setStatus("Đang tải video lên…", "busy");
+    setStatus(t("status.uploadingVideo"), "busy");
     const job = await api.transcribe(form);
     bindPreviewToJob(job.id);
     adoptJob(job);
-    toast("Đã đưa video vào hàng đợi AI", "success");
+    toast(t("toast.queuedForAi"), "success");
     watchJob(job.id);
   } catch (error) {
     reportError(error);
@@ -203,7 +205,7 @@ export async function transcribe() {
  *  not mean re-uploading a multi-hundred-megabyte file. */
 async function rerunTranscription() {
   const job = state.job;
-  if (!job?.video_available) return toast("Chọn video trước đã", "error");
+  if (!job?.video_available) return toast(t("toast.pickVideoFirst"), "error");
 
   // Language first: it is a fixable input, and the overwrite confirm should be
   // the last gate before the cues are actually thrown away.
@@ -211,20 +213,20 @@ async function rerunTranscription() {
 
   if (hasCues()) {
     const confirmed = await confirmAction({
-      title: "Chạy lại nhận dạng?",
+      title: t("confirm.rerunTitle"),
       target: job.video_name || "video",
-      note: `${cues().length} cue hiện tại (kèm bản dịch và mọi chỉnh tay) sẽ bị thay bằng kết quả mới.`,
-      confirmLabel: "Chạy lại",
-      cancelLabel: "Giữ nguyên",
+      note: t("confirm.rerunNote", { count: cues().length }),
+      confirmLabel: t("confirm.rerunOk"),
+      cancelLabel: t("confirm.keep"),
     });
     if (!confirmed) return;
   }
 
   try {
-    setStatus("Đang xếp hàng nhận dạng lại…", "busy");
+    setStatus(t("status.queueingRerun"), "busy");
     const updated = await api.retranscribe(job.id, engineForm());
     adoptJob(updated);
-    toast("Đang chạy lại trên video đã lưu — không cần tải lên", "success");
+    toast(t("toast.rerunOnStored"), "success");
     watchJob(updated.id);
   } catch (error) {
     reportError(error);
@@ -290,8 +292,8 @@ function syncTargetHint() {
   node.style.display = clash ? "flex" : "none";
   if (!clash) return;
   $("#target-language-hint-text").textContent = clash.rewritesText
-    ? `Nguồn (${clash.source}) và đích (${clash.label}) cùng một ngôn ngữ — chỉ khác biến thể vùng.`
-    : `Phụ đề gốc đã là ${clash.label} — dịch sang chính nó sẽ tốn phí mà gần như không đổi.`;
+    ? t("hint.regionVariant", { source: clash.source, target: clash.label })
+    : t("hint.alreadyTarget", { target: clash.label });
 }
 
 /** Answered once per source→target pair, not once per run. */
@@ -303,15 +305,13 @@ async function confirmTargetLanguage() {
 
   const sourceName = languageLabel(clash.source);
   const confirmed = await confirmAction({
-    title: clash.rewritesText
-      ? "Nguồn và đích cùng một ngôn ngữ"
-      : "Ngôn ngữ đích trùng ngôn ngữ nguồn",
+    title: t(clash.rewritesText ? "guard.sameLanguageTitle" : "guard.targetEqualsSourceTitle"),
     target: `${sourceName} → ${clash.label}`,
     note: clash.rewritesText
-      ? `Phụ đề gốc là ${sourceName}, đích là ${clash.label} — cùng một ngôn ngữ, chỉ khác biến thể vùng. Lượt dịch vẫn gọi provider và tính phí đủ từng batch trong khi phần lớn câu sẽ gần như giữ nguyên.`
-      : `Phụ đề gốc đã là ${clash.label}. Lượt dịch này vẫn gọi provider cho từng batch và tính phí như thường, nhưng kết quả trả về gần như trùng bản gốc.\n\nMuốn biên tập lại lời thoại thì sửa trực tiếp trên danh sách cue sẽ nhanh và rẻ hơn.`,
-    confirmLabel: "Vẫn dịch",
-    cancelLabel: "Đổi ngôn ngữ đích",
+      ? t("guard.sameLanguageNote", { source: sourceName, target: clash.label })
+      : t("guard.targetEqualsSourceNote", { target: clash.label }),
+    confirmLabel: t("guard.translateAnyway"),
+    cancelLabel: t("guard.changeTarget"),
     variant: "warning",
   });
   if (!confirmed) {
@@ -340,7 +340,9 @@ async function runTranslation(fromCue) {
     );
     adoptJob(job, { keepSelection: true });
     toast(
-      fromCue ? `Đang dịch tiếp từ cue ${fromCue + 1}` : "Đã đưa phụ đề vào hàng đợi dịch",
+      fromCue
+        ? t("toast.translatingFrom", { cue: fromCue + 1 })
+        : t("toast.translationQueued"),
       "success",
     );
     watchJob(job.id);
@@ -350,7 +352,7 @@ async function runTranslation(fromCue) {
 }
 
 export async function translate() {
-  if (!hasCues()) return toast("Cần có cue trước khi dịch", "error");
+  if (!hasCues()) return toast(t("toast.needCuesToTranslate"), "error");
 
   // Before the overwrite confirm: the target language is still fixable here,
   // the translations about to be thrown away are not.
@@ -359,11 +361,11 @@ export async function translate() {
   const done = translatedCount();
   if (done) {
     const confirmed = await confirmAction({
-      title: "Dịch lại toàn bộ?",
-      target: state.job.video_name || state.job.subtitle_name || "project này",
-      note: `${done} cue đã có bản dịch sẽ bị dịch lại từ đầu. Muốn giữ phần đã xong thì chọn cue cần dịch tiếp rồi bấm “Dịch từ cue…”.`,
-      confirmLabel: "Dịch lại tất cả",
-      cancelLabel: "Giữ nguyên",
+      title: t("confirm.retranslateTitle"),
+      target: state.job.video_name || state.job.subtitle_name || t("project.thisOne"),
+      note: t("confirm.retranslateNote", { count: done }),
+      confirmLabel: t("confirm.retranslateOk"),
+      cancelLabel: t("confirm.keep"),
     });
     if (!confirmed) return;
   }
@@ -372,18 +374,18 @@ export async function translate() {
 
 /** Pick up where a stopped run left off, or re-do one scene onwards. */
 export async function translateFromSelection() {
-  if (!hasCues()) return toast("Cần có cue trước khi dịch", "error");
-  if (state.selected < 0) return toast("Chọn cue muốn dịch từ đó trở đi", "error");
+  if (!hasCues()) return toast(t("toast.needCuesToTranslate"), "error");
+  if (state.selected < 0) return toast(t("toast.pickCueToTranslateFrom"), "error");
   if (!(await confirmTargetLanguage())) return;
   runTranslation(state.selected);
 }
 
 export async function reanalyzeSpeakers() {
-  if (!hasCues()) return toast("Cần có cue trước khi phân tích", "error");
+  if (!hasCues()) return toast(t("toast.needCuesToAnalyze"), "error");
   try {
     const job = await api.analyzeSpeakers(state.job.id);
     adoptJob(job, { keepSelection: true });
-    toast("Đang phân tích lại lượt thoại, không chạy lại Deepgram", "success");
+    toast(t("toast.reanalyzing"), "success");
     watchJob(job.id);
   } catch (error) {
     reportError(error);
@@ -393,24 +395,24 @@ export async function reanalyzeSpeakers() {
 /* ── Deliverables ─────────────────────────────────────────────── */
 
 function downloadSubtitle(track, format) {
-  if (!state.job) return toast("Chưa có project", "error");
+  if (!state.job) return toast(t("toast.noProject"), "error");
   const link = document.createElement("a");
   link.href = api.downloadUrl(state.job.id, track, format);
   link.click();
 }
 
 async function muxVideo() {
-  if (!state.job?.video_available) return toast("Project này không có video để ghép", "error");
+  if (!state.job?.video_available) return toast(t("toast.noVideoToMux"), "error");
   try {
-    setStatus("Đang ghép phụ đề vào video…", "busy");
+    setStatus(t("status.muxing"), "busy");
     const blob = await api.mux(state.job.id);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `${(state.job.video_name || "video").replace(/\.[^.]+$/, "")}.subtitled.mp4`;
     link.click();
     URL.revokeObjectURL(link.href);
-    setStatus("Đã xuất video có phụ đề");
-    toast("Đã xuất video có soft subtitle", "success");
+    setStatus(t("status.muxed"));
+    toast(t("toast.muxed"), "success");
   } catch (error) {
     reportError(error);
   }
@@ -426,14 +428,14 @@ function syncModelOptions(preferred = "") {
   const options = [...(capabilities?.transcription_models?.[provider] || [])];
 
   if (configured && !options.some((item) => item.value === configured)) {
-    options.push({ value: configured, label: `${configured} — từ .env` });
+    options.push({ value: configured, hint: { code: "model.fromEnv" } });
   }
   if (options.length) {
     select.replaceChildren(
       ...options.map((item) => {
         const option = document.createElement("option");
         option.value = item.value;
-        option.textContent = item.label;
+        option.textContent = optionLabel(item);
         return option;
       }),
     );
@@ -441,8 +443,9 @@ function syncModelOptions(preferred = "") {
   const target = preferred || configured || options[0]?.value || "";
   if ([...select.options].some((option) => option.value === target)) select.value = target;
   select.disabled = options.length === 0;
-  $("#transcription-model-label").textContent =
-    provider === "deepgram" ? "Model Deepgram" : "Model Whisper";
+  $("#transcription-model-label").textContent = t(
+    provider === "deepgram" ? "field.modelDeepgram" : "field.modelWhisper",
+  );
   updateEngineChip();
   // Whether "multi" counts as unset depends on the engine, so the hint has to
   // follow the provider as well as the language.
@@ -460,14 +463,14 @@ function syncTranslationModelOptions(preferred = "") {
   const options = [...(capabilities?.translation_models?.[provider] || [])];
 
   if (configured && !options.some((item) => item.value === configured)) {
-    options.push({ value: configured, label: `${configured} — từ .env` });
+    options.push({ value: configured, hint: { code: "model.fromEnv" } });
   }
   if (options.length) {
     select.replaceChildren(
       ...options.map((item) => {
         const option = document.createElement("option");
         option.value = item.value;
-        option.textContent = item.label;
+        option.textContent = optionLabel(item);
         return option;
       }),
     );
@@ -475,8 +478,9 @@ function syncTranslationModelOptions(preferred = "") {
   const target = preferred || configured || options[0]?.value || "";
   if ([...select.options].some((option) => option.value === target)) select.value = target;
   select.disabled = options.length === 0;
-  $("#translation-model-label").textContent =
-    provider === "transformers" ? "Model Transformers" : "Model LLM";
+  $("#translation-model-label").textContent = t(
+    provider === "transformers" ? "field.modelTransformers" : "field.modelLlm",
+  );
   if (capabilities) renderCapabilityNote(capabilities);
 }
 
@@ -488,12 +492,17 @@ function updateEngineChip() {
     provider === "deepgram" ? capabilities?.deepgram_configured : capabilities?.whisper_available;
   const name = provider === "deepgram" ? "Deepgram" : "Whisper";
   $("#engine-chip").dataset.state = ready === false ? "down" : "ok";
-  $("#engine-label").textContent = ready === false ? `${name} chưa sẵn sàng` : `${name} · ${model || "ready"}`;
+  $("#engine-label").textContent =
+    ready === false ? t("engine.notReady", { name }) : `${name} · ${model || "ready"}`;
 }
 
 function renderCapabilityNote(capabilities) {
-  const whisper = capabilities.whisper_available ? capabilities.whisper_model : "chưa cài";
-  const deepgram = capabilities.deepgram_configured ? capabilities.deepgram_model : "thiếu API key";
+  const whisper = capabilities.whisper_available
+    ? capabilities.whisper_model
+    : t("capability.notInstalled");
+  const deepgram = capabilities.deepgram_configured
+    ? capabilities.deepgram_model
+    : t("capability.missingKey");
 
   const currentTransProvider = $("#translation-provider")?.value || capabilities.translation_provider;
   const currentTransModel = $("#translation-model")?.value || capabilities.translation_model;
@@ -507,16 +516,21 @@ function renderCapabilityNote(capabilities) {
     currentTransProvider === "transformers" ? "" : capabilities.llm_endpoint || "";
   const translation = translationReady
     ? `${currentTransModel || currentTransProvider}${endpoint ? ` @ ${endpoint}` : ""}`
-    : `${currentTransProvider} (chưa cấu hình)`;
+    : t("capability.providerNotConfigured", { provider: currentTransProvider });
 
   const speakerAnalysis = $("#speaker-analysis");
   speakerAnalysis.disabled = !capabilities.speaker_analysis_configured;
   if (!capabilities.speaker_analysis_configured) speakerAnalysis.checked = false;
   const dialogueAI = capabilities.speaker_analysis_configured
     ? capabilities.speaker_analysis_model
-    : "chưa cấu hình";
-  $("#capability-note").textContent =
-    `Deepgram: ${deepgram} · Whisper: ${whisper} · AI lượt thoại: ${dialogueAI} · Dịch: ${translation} · ffmpeg: ${capabilities.ffmpeg ? "OK" : "thiếu"}`;
+    : t("capability.notConfigured");
+  $("#capability-note").textContent = t("capability.note", {
+    deepgram,
+    whisper,
+    dialogue: dialogueAI,
+    translation,
+    ffmpeg: t(capabilities.ffmpeg ? "capability.ok" : "capability.missing"),
+  });
 }
 
 /** The style presets live in the backend, so the picker is built from them. */
@@ -529,7 +543,7 @@ function syncStyleOptions(capabilities) {
     ...options.map((item) => {
       const option = document.createElement("option");
       option.value = item.value;
-      option.textContent = item.label;
+      option.textContent = tm({ code: item.label_code });
       return option;
     }),
   );
@@ -588,9 +602,9 @@ export async function loadCapabilities() {
     restoreTranslationFromJob();
     renderCapabilityNote(capabilities);
   } catch {
-    $("#capability-note").textContent = "Không đọc được cấu hình backend.";
+    $("#capability-note").textContent = t("capability.unreadable");
     $("#engine-chip").dataset.state = "down";
-    $("#engine-label").textContent = "Backend không phản hồi";
+    $("#engine-label").textContent = t("engine.backendSilent");
   }
 }
 
@@ -605,12 +619,16 @@ function refreshButtons() {
   $("#reanalyze-speakers-btn").disabled =
     blocked || !cued || !state.capabilities?.speaker_analysis_configured;
   $("#translate-btn").disabled = blocked || !cued;
-  // A project that already has translations is never "dịch" again, it is
-  // "dịch lại" — and that word is the warning the confirm then spells out.
-  $("#translate-label").textContent = translatedCount() ? "Dịch lại toàn bộ" : "Dịch toàn bộ cue";
+  // A project that already has translations is never translated again, it is
+  // *re*-translated — and that word is the warning the confirm then spells out.
+  $("#translate-label").textContent = t(
+    translatedCount() ? "action.retranslateAll" : "action.translateAll",
+  );
   $("#translate-from-btn").disabled = blocked || !cued || state.selected < 0;
   $("#translate-from-label").textContent =
-    state.selected >= 0 ? `Dịch từ cue ${state.selected + 1} trở đi` : "Dịch từ cue đang chọn";
+    state.selected >= 0
+      ? t("action.translateFromCue", { cue: state.selected + 1 })
+      : t("action.translateFrom");
   $("#download-source-srt").disabled = !cued;
   $("#download-translated-srt").disabled = !cued;
   $("#download-vtt").disabled = !cued;

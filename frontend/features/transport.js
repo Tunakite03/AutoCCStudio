@@ -9,6 +9,7 @@ import { $, $$, element } from "../core/dom.js";
 import { clamp, formatTimecode } from "../core/format.js";
 import { cues, emit, on, onAny, setActiveCue, state } from "../core/store.js";
 import { toast } from "../core/feedback.js";
+import { t } from "../core/i18n.js";
 
 const player = $("#player");
 const viewer = $("#viewer");
@@ -69,7 +70,7 @@ function tick() {
 }
 
 export function togglePlay() {
-  if (!local.ready) return toast("Project này chưa có video để phát", "error");
+  if (!local.ready) return toast(t("toast.noVideoToPlay"), "error");
   // Mid-scrub the transport still reads "playing", so a click here means stop —
   // the element is already paused, all that's left is to cancel the resume.
   if (local.resumeAfterScrub) {
@@ -226,7 +227,7 @@ export function mountTransport() {
     if (!player.getAttribute("src")) return;
     local.ready = false;
     viewer.classList.remove("has-video");
-    toast("Trình duyệt không phát được codec của video này. Timeline vẫn dùng được.", "error");
+    toast(t("toast.codecUnsupported"), "error");
   });
 
   player.addEventListener("play", () => {

@@ -10,6 +10,8 @@
  * because views talk to the store, not to each other.
  */
 
+import { $ } from "./core/dom.js";
+import { annotateLanguageOptions, applyDocumentLanguage, applyStaticText } from "./core/i18n.js";
 import { startRouter } from "./core/router.js";
 import { mountCueList } from "./features/cuelist.js";
 import { mountDashboard } from "./features/dashboard.js";
@@ -24,6 +26,13 @@ import { mountTimelineView } from "./features/timeline-view.js";
 import { mountTransport } from "./features/transport.js";
 
 function boot() {
+  // Text first: every mount below reads labels out of the DOM or writes its own
+  // through t(), and both want the catalogue already applied.
+  applyDocumentLanguage();
+  applyStaticText();
+  annotateLanguageOptions($("#source-language"));
+  annotateLanguageOptions($("#target-language"));
+
   mountShell();
   mountTransport();
   mountTimelineView();

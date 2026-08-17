@@ -31,6 +31,7 @@ from ..jobs.model import (
     public_job,
 )
 from ..jobs.tasks import speaker_analysis_task, transcription_task, translation_task
+from ..messages import detail
 from ..subtitles import (
     SubtitleParseError,
     format_subtitle,
@@ -74,16 +75,17 @@ class TranslatePayload(BaseModel):
 
 
 @contextmanager
-def _claim(job_id: str, reason: str) -> Iterator[dict]:
+def _claim(job_id: str, busy_code: str = "err.job.busy") -> Iterator[dict]:
     """Open a job for a transition that is illegal while it is busy.
 
     Checking status and marking the job as taken happens under one lock, so two
-    simultaneous requests cannot both decide the job was free.
+    simultaneous requests cannot both decide the job was free. `busy_code` names
+    the refusal for the client — the default says only that the job is running.
     """
 
     with store.edit(job_id) as job:
         if job.get("status") == STATUS_PROCESSING:
-            raise JobConflict(reason)
+            raise JobConflict(busy_code)
         yield job
 
 
@@ -99,7 +101,7 @@ async def _save_upload(upload: UploadFile, destination: Path) -> None:
                 if size > settings.max_upload_bytes:
                     raise HTTPException(
                         status_code=413,
-                        detail=f"File vượt quá giới hạn {settings.max_upload_mb} MB",
+                        detail=detail("err.upload.tooLarge", limitMb=settings.max_upload_mb),
                     )
                 output.write(chunk)
     except Exception:
@@ -144,7 +146,9 @@ def _job_summary(job: dict, job_dir: Path) -> dict:
         "kind": job["kind"],
         "status": job["status"],
         "error": job.get("error"),
-        "name": job.get("video_name") or job.get("subtitle_name") or "Project không tên",
+        # Empty rather than a placeholder: naming an untitled project is the
+        # client's job, in the client's language.
+        "name": job.get("video_name") or job.get("subtitle_name") or "",
         "video_available": bool(video_path) and Path(video_path).exists(),
         "has_thumbnail": (job_dir / "thumb.jpg").exists(),
         "cue_count": len(cues),
@@ -169,16 +173,15 @@ def _resolve_engine(provider: str, model: str, model_size: str = "") -> tuple[st
     if provider == "whisper":
         provider = "faster_whisper"
     if provider not in {"faster_whisper", "deepgram"}:
-        raise HTTPException(status_code=400, detail="Provider nhận dạng không hợp lệ")
+        raise HTTPException(status_code=400, detail=detail("err.transcription.badProvider"))
     if provider == "deepgram" and not settings.deepgram_api_key.strip():
         raise HTTPException(
-            status_code=400,
-            detail="Deepgram chưa được cấu hình. Thêm DEEPGRAM_API_KEY vào file .env rồi khởi động lại app.",
+            status_code=400, detail=detail("err.transcription.deepgramNotConfigured")
         )
     default_model = settings.deepgram_model if provider == "deepgram" else settings.whisper_model
     selected_model = model.strip() or model_size.strip() or default_model
     if len(selected_model) > 128:
-        raise HTTPException(status_code=400, detail="Tên model quá dài")
+        raise HTTPException(status_code=400, detail=detail("err.model.nameTooLong"))
     return provider, selected_model
 
 
@@ -193,15 +196,14 @@ def _resolve_translation_engine(provider: str, model: str) -> tuple[str, str]:
 
     if resolved_provider == ai.TRANSLATION_OPENAI_COMPATIBLE and not ai.settings.llm_base_url.strip():
         raise HTTPException(
-            status_code=400,
-            detail="LLM chưa được cấu hình. Thêm LLM_BASE_URL vào file .env rồi khởi động lại app.",
+            status_code=400, detail=detail("err.translation.llmNotConfigured")
         )
     if resolved_provider == ai.TRANSLATION_TRANSFORMERS:
         default_transformers_model = ai.settings.translation_model.strip()
         if not (model.strip() or default_transformers_model):
             raise HTTPException(
                 status_code=400,
-                detail="TRANSLATION_MODEL chưa được cấu hình cho Transformers local.",
+                detail=detail("err.translation.transformersModelMissing"),
             )
 
     default_model = (
@@ -211,7 +213,7 @@ def _resolve_translation_engine(provider: str, model: str) -> tuple[str, str]:
     )
     selected_model = model.strip() or default_model
     if len(selected_model) > 128:
-        raise HTTPException(status_code=400, detail="Tên model quá dài")
+        raise HTTPException(status_code=400, detail=detail("err.model.nameTooLong"))
     return resolved_provider, selected_model
 
 
@@ -259,7 +261,7 @@ def delete_job(job_id: str) -> dict:
 async def import_subtitle(file: Annotated[UploadFile, File(...)]) -> dict:
     suffix = _safe_suffix(file.filename, ".srt")
     if suffix not in {".srt", ".vtt"}:
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file .srt hoặc .vtt")
+        raise HTTPException(status_code=400, detail=detail("err.subtitle.unsupported"))
 
     job = new_job(KIND_SUBTITLE_IMPORT, subtitle_name=file.filename or "subtitle.srt")
     with _new_job_directory(job) as directory:
@@ -269,10 +271,11 @@ async def import_subtitle(file: Annotated[UploadFile, File(...)]) -> dict:
             cues = parse_subtitle(destination.read_text(encoding="utf-8-sig"), suffix)
         except (OSError, UnicodeError, SubtitleParseError) as exc:
             raise HTTPException(
-                status_code=400, detail=f"Không đọc được subtitle: {exc}"
+                status_code=400,
+                detail=detail("err.subtitle.unreadable", cause=str(exc)),
             ) from exc
         if not cues:
-            raise HTTPException(status_code=400, detail="Subtitle không có cue hợp lệ")
+            raise HTTPException(status_code=400, detail=detail("err.subtitle.noCues"))
         job["subtitle_path"] = str(destination)
         job["cues"] = cues
         store.create(job)
@@ -289,7 +292,7 @@ async def start_transcription(
     analyze_speakers: Annotated[bool, Form()] = False,
 ) -> dict:
     if not video.filename:
-        raise HTTPException(status_code=400, detail="Thiếu file video")
+        raise HTTPException(status_code=400, detail=detail("err.upload.videoMissing"))
     resolved_provider, selected_model = _resolve_engine(provider, model, model_size)
 
     job = new_job(KIND_TRANSCRIPTION, video_name=video.filename)
@@ -340,12 +343,10 @@ def restart_transcription(
     """
 
     resolved_provider, selected_model = _resolve_engine(provider, model)
-    with _claim(job_id, "Job đang xử lý") as job:
+    with _claim(job_id) as job:
         video_path = job.get("video_path")
         if not video_path or not Path(video_path).exists():
-            raise HTTPException(
-                status_code=400, detail="Project này không còn video trên máy chủ"
-            )
+            raise HTTPException(status_code=400, detail=detail("err.job.videoGone"))
         _start_transcription_fields(
             job, resolved_provider, selected_model, source_language, analyze_speakers
         )
@@ -365,12 +366,12 @@ def start_speaker_analysis(job_id: str) -> dict:
     analysis_model = (settings.speaker_analysis_model or settings.llm_model).strip()
     if not settings.llm_base_url.strip() or not analysis_model:
         raise HTTPException(
-            status_code=400, detail="Chưa cấu hình LLM phân tích lượt thoại"
+            status_code=400, detail=detail("err.speakerAnalysis.notConfigured")
         )
 
-    with _claim(job_id, "Job đang xử lý") as job:
+    with _claim(job_id) as job:
         if not job.get("cues"):
-            raise HTTPException(status_code=400, detail="Job chưa có cue để phân tích")
+            raise HTTPException(status_code=400, detail=detail("err.job.noCuesToAnalyze"))
         job["status"] = STATUS_PROCESSING
         job["error"] = None
         job["cancel_requested"] = False
@@ -388,30 +389,30 @@ def start_speaker_analysis(job_id: str) -> dict:
 def start_translation(job_id: str, payload: TranslatePayload) -> dict:
     target_language = payload.target_language.strip()
     if not target_language:
-        raise HTTPException(status_code=400, detail="Thiếu ngôn ngữ đích")
+        raise HTTPException(status_code=400, detail=detail("err.translation.targetMissing"))
     style_notes = payload.style_notes.strip()
     if len(style_notes) > STYLE_NOTES_LIMIT:
         raise HTTPException(
             status_code=400,
-            detail=f"Ghi chú phong cách tối đa {STYLE_NOTES_LIMIT} ký tự",
+            detail=detail("err.translation.styleNotesTooLong", limit=STYLE_NOTES_LIMIT),
         )
     style = payload.style.strip().lower() or STYLE_AUTO
     if style != STYLE_AUTO and style not in STYLES:
-        raise HTTPException(status_code=400, detail="Phong cách dịch không hợp lệ")
+        raise HTTPException(status_code=400, detail=detail("err.translation.badStyle"))
 
     resolved_provider, selected_model = _resolve_translation_engine(
         payload.provider, payload.model
     )
 
     if payload.from_cue < 0:
-        raise HTTPException(status_code=400, detail="Vị trí cue bắt đầu không hợp lệ")
+        raise HTTPException(status_code=400, detail=detail("err.translation.badFromCue"))
 
-    with _claim(job_id, "Job đang xử lý") as job:
+    with _claim(job_id) as job:
         if not job.get("cues"):
-            raise HTTPException(status_code=400, detail="Job chưa có cue để dịch")
+            raise HTTPException(status_code=400, detail=detail("err.job.noCuesToTranslate"))
         if payload.from_cue >= len(job["cues"]):
             raise HTTPException(
-                status_code=400, detail="Không còn cue nào từ vị trí đó trở đi"
+                status_code=400, detail=detail("err.translation.noCuesFromHere")
             )
         job["status"] = STATUS_PROCESSING
         job["error"] = None
@@ -453,7 +454,7 @@ def cancel_job(job_id: str) -> dict:
 
     with store.edit(job_id) as job:
         if job.get("status") != STATUS_PROCESSING:
-            raise JobConflict("Job không còn chạy")
+            raise JobConflict("err.job.notRunning")
         job["cancel_requested"] = True
         return public_job(job)
 
@@ -463,9 +464,13 @@ def update_cues(job_id: str, payload: CuesPayload) -> dict:
     cues = []
     for index, cue in enumerate(payload.cues, start=1):
         if cue.end <= cue.start:
-            raise HTTPException(status_code=400, detail=f"Cue {index}: end phải lớn hơn start")
+            raise HTTPException(
+                status_code=400, detail=detail("err.cue.endBeforeStart", cue=index)
+            )
         if cue.start < 0:
-            raise HTTPException(status_code=400, detail=f"Cue {index}: start không được âm")
+            raise HTTPException(
+                status_code=400, detail=detail("err.cue.negativeStart", cue=index)
+            )
         cues.append(
             {
                 "id": index,
@@ -479,7 +484,7 @@ def update_cues(job_id: str, payload: CuesPayload) -> dict:
 
     # A worker owns job["cues"] while it runs and would overwrite these edits on
     # completion, so refuse the edit rather than silently discard it later.
-    with _claim(job_id, "Job đang xử lý, không thể sửa cue") as job:
+    with _claim(job_id, "err.job.busyCueEdit") as job:
         job["cues"] = cues
         if job["status"] in {STATUS_ERROR, STATUS_CANCELLED}:
             # The user has taken the cues in hand; the project is theirs again,
@@ -491,9 +496,9 @@ def update_cues(job_id: str, payload: CuesPayload) -> dict:
 
 @router.post("/{job_id}/split-long-cues")
 def split_job_long_cues(job_id: str) -> dict:
-    with _claim(job_id, "Job đang xử lý") as job:
+    with _claim(job_id) as job:
         if not job.get("cues"):
-            raise HTTPException(status_code=400, detail="Job chưa có cue để tách")
+            raise HTTPException(status_code=400, detail=detail("err.job.noCuesToSplit"))
         job["cues"] = split_long_cues(job["cues"])
         return public_job(job)
 
@@ -503,9 +508,9 @@ def download_subtitle(job_id: str, format: str = "srt", track: str = "source") -
     job = store.read(job_id)
     format_name = format.lower().lstrip(".")
     if format_name not in {"srt", "vtt"}:
-        raise HTTPException(status_code=400, detail="Format phải là srt hoặc vtt")
+        raise HTTPException(status_code=400, detail=detail("err.download.badFormat"))
     if track not in {"source", "translated"}:
-        raise HTTPException(status_code=400, detail="Track phải là source hoặc translated")
+        raise HTTPException(status_code=400, detail=detail("err.download.badTrack"))
     content = format_subtitle(job.get("cues", []), format_name, track)
     stem = Path(job.get("video_name") or job.get("subtitle_name") or "subtitle").stem
     return Response(

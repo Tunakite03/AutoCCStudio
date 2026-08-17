@@ -13,44 +13,59 @@ from array import array
 from pathlib import Path
 
 from .config import get_logger, settings
+from .messages import CodedError, Message
 
 
 logger = get_logger("media")
 
+# Which render failed, as a code the client can name. Passed in rather than
+# derived so the log line and the message agree on what was being attempted.
+OP_THUMBNAIL = Message("op.thumbnail")
+OP_WAVEFORM = Message("op.waveform")
+OP_MUX = Message("op.mux")
 
-class FFmpegError(RuntimeError):
+
+class FFmpegError(CodedError):
     """ffmpeg is missing, timed out, or exited non-zero."""
 
-    def __init__(self, message: str, *, timed_out: bool = False, missing: bool = False):
-        super().__init__(message)
+    def __init__(self, code, *, timed_out: bool = False, missing: bool = False, **params):
+        super().__init__(code, **params)
         self.timed_out = timed_out
         self.missing = missing
+
+
+class NoAudioTrack(CodedError):
+    """The media decoded fine but carries no audio."""
 
 
 def require_ffmpeg() -> str:
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
-        raise FFmpegError("Không tìm thấy ffmpeg trong PATH", missing=True)
+        raise FFmpegError("err.ffmpeg.missing", missing=True)
     return ffmpeg
 
 
-def run_ffmpeg(arguments: list[str], *, timeout: int, label: str) -> str:
+def run_ffmpeg(arguments: list[str], *, timeout: int, operation: Message) -> str:
     """Run ffmpeg and return its stderr, raising FFmpegError on any failure."""
 
     command = [require_ffmpeg(), "-y", "-v", "error", *arguments]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
-        logger.warning("%s: ffmpeg timed out after %ss", label, timeout)
-        raise FFmpegError(f"ffmpeg chạy quá {timeout} giây khi {label}", timed_out=True) from exc
+        logger.warning("%s: ffmpeg timed out after %ss", operation, timeout)
+        raise FFmpegError(
+            "err.ffmpeg.timeout", timed_out=True, operation=operation, seconds=timeout
+        ) from exc
     except OSError as exc:
-        logger.warning("%s: ffmpeg could not be launched: %s", label, exc)
-        raise FFmpegError(f"Không chạy được ffmpeg khi {label}: {exc}") from exc
+        logger.warning("%s: ffmpeg could not be launched: %s", operation, exc)
+        raise FFmpegError(
+            "err.ffmpeg.launchFailed", operation=operation, cause=str(exc)
+        ) from exc
 
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "ffmpeg failed").strip()[-1500:]
-        logger.warning("%s: ffmpeg exited %s: %s", label, result.returncode, detail)
-        raise FFmpegError(f"ffmpeg lỗi khi {label}: {detail}")
+        logger.warning("%s: ffmpeg exited %s: %s", operation, result.returncode, detail)
+        raise FFmpegError("err.ffmpeg.failed", operation=operation, detail=detail)
     return result.stderr or ""
 
 
@@ -160,10 +175,6 @@ def extract_transcription_audio(media_path: Path, output_dir: Path | None = None
         return None
 
 
-class NoAudioTrack(RuntimeError):
-    """The media decoded fine but carries no audio."""
-
-
 WAVEFORM_RESOLUTION = 20
 WAVEFORM_SAMPLE_RATE = 4000
 THUMBNAIL_TIMEOUT_SECONDS = 60
@@ -183,10 +194,10 @@ def render_thumbnail(video_path: Path, destination: Path) -> Path:
             str(destination),
         ],
         timeout=THUMBNAIL_TIMEOUT_SECONDS,
-        label="tạo ảnh đại diện",
+        operation=OP_THUMBNAIL,
     )
     if not destination.exists():
-        raise FFmpegError("ffmpeg không tạo được ảnh đại diện")
+        raise FFmpegError("err.ffmpeg.noThumbnail")
     return destination
 
 
@@ -226,14 +237,19 @@ def extract_waveform(video_path: Path) -> dict:
             process.wait(timeout=WAVEFORM_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as exc:
             process.kill()
-            raise FFmpegError("ffmpeg chạy quá lâu khi đọc dạng sóng", timed_out=True) from exc
+            raise FFmpegError(
+                "err.ffmpeg.timeout",
+                timed_out=True,
+                operation=OP_WAVEFORM,
+                seconds=WAVEFORM_TIMEOUT_SECONDS,
+            ) from exc
 
     if process.returncode != 0:
         detail = stderr.strip()[-500:]
         logger.warning("waveform decode exited %s: %s", process.returncode, detail)
-        raise FFmpegError(f"ffmpeg lỗi khi đọc dạng sóng: {detail}")
+        raise FFmpegError("err.ffmpeg.failed", operation=OP_WAVEFORM, detail=detail)
     if not peaks:
-        raise NoAudioTrack("Video không có audio track")
+        raise NoAudioTrack("err.media.noAudioTrack")
     return {"resolution": WAVEFORM_RESOLUTION, "peaks": peaks}
 
 
@@ -253,9 +269,9 @@ def mux_soft_subtitles(video_path: Path, subtitle_path: Path, destination: Path)
             str(destination),
         ],
         timeout=MUX_TIMEOUT_SECONDS,
-        label="ghép phụ đề vào video",
+        operation=OP_MUX,
     )
     if not destination.exists():
-        raise FFmpegError("ffmpeg không tạo được file video có phụ đề")
+        raise FFmpegError("err.ffmpeg.noMuxedVideo")
     return destination
 

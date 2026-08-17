@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterator
 from .apikeys import CredentialPool
 from .cancellation import raise_if_stopped
 from .config import get_logger, settings
+from .messages import CodedError
 
 logger = get_logger("http")
 
@@ -47,11 +48,18 @@ RETRY_AFTER_HEADERS = (
 STOP_CHECK_INTERVAL_SECONDS = 0.5
 
 
-class HTTPClientError(RuntimeError):
+class HTTPClientError(CodedError):
     """A provider call failed after exhausting retries."""
 
-    def __init__(self, message: str, status_code: int | None = None, body: str = ""):
-        super().__init__(message)
+    def __init__(
+        self,
+        code,
+        *,
+        status_code: int | None = None,
+        body: str = "",
+        **params,
+    ):
+        super().__init__(code, **params)
         self.status_code = status_code
         self.body = body
 
@@ -60,9 +68,7 @@ def _requests():
     try:
         import requests
     except ImportError as exc:  # pragma: no cover - requests is a hard dependency
-        raise HTTPClientError(
-            "Chưa cài requests. Chạy: pip install -r requirements.txt"
-        ) from exc
+        raise HTTPClientError("err.http.requestsMissing") from exc
     return requests
 
 
@@ -115,11 +121,13 @@ def _pool_exhausted(label: str, credentials, tried: int, detail: str) -> HTTPCli
 
     logger.warning("%s: all %s API keys stayed rate limited", label, len(credentials))
     return HTTPClientError(
-        f"Cả {len(credentials)} API key của {label} đều đang bị giới hạn tốc độ "
-        f"(HTTP 429) sau {tried} lần thử. Hãy đợi hạn mức hồi lại rồi chạy tiếp, "
-        f"hoặc thêm key mới vào .env: {detail}",
+        "err.http.poolExhausted",
         status_code=RATE_LIMITED_STATUS,
         body=detail,
+        label=label,
+        keys=len(credentials),
+        tried=tried,
+        detail=detail,
     )
 
 
@@ -216,7 +224,7 @@ def post(
                 continue
             logger.warning("%s unreachable: %s", label, exc)
             raise HTTPClientError(
-                f"Không kết nối được {label}: {exc} (sau {used} lần thử)"
+                "err.http.unreachable", label=label, attempts=used, cause=str(exc)
             ) from exc
 
         if response.ok:
@@ -249,10 +257,12 @@ def post(
                 continue
             logger.warning("%s stayed rate limited: %s", label, detail)
             raise HTTPClientError(
-                f"{label} vẫn giới hạn tốc độ (HTTP 429) sau {rate_limit_budget} "
-                f"lần thử: {detail}",
+                "err.http.rateLimited",
                 status_code=response.status_code,
                 body=detail,
+                label=label,
+                attempts=rate_limit_budget,
+                detail=detail,
             )
 
         if key is not None and response.status_code in KEY_REJECTED_STATUS:
@@ -266,10 +276,13 @@ def post(
                 continue
             logger.warning("%s rejected every API key it was given", label)
             raise HTTPClientError(
-                f"{label} từ chối cả {len(credentials)} API key (HTTP "
-                f"{response.status_code}). Kiểm tra lại LLM_API_KEY trong .env: {detail}",
+                "err.http.keysRejected",
                 status_code=response.status_code,
                 body=detail,
+                label=label,
+                keys=len(credentials),
+                status=response.status_code,
+                detail=detail,
             )
 
         if response.status_code in RETRYABLE_STATUS and used < attempts:
@@ -283,9 +296,12 @@ def post(
 
         logger.warning("%s returned HTTP %s: %s", label, response.status_code, detail)
         raise HTTPClientError(
-            f"{label} trả về HTTP {response.status_code}: {detail}",
+            "err.http.status",
             status_code=response.status_code,
             body=detail,
+            label=label,
+            status=response.status_code,
+            detail=detail,
         )
 
 
@@ -296,5 +312,5 @@ def json_body(response, label: str) -> Any:
         payload = response.json()
     except ValueError as exc:
         logger.warning("%s returned a non-JSON body", label)
-        raise HTTPClientError(f"{label} trả về dữ liệu không phải JSON") from exc
+        raise HTTPClientError("err.http.notJson", label=label) from exc
     return payload

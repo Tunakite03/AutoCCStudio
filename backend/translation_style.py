@@ -8,6 +8,12 @@ film but never overwrite it.
 
 Presets are picked from the source language by default because that is where the
 expectation comes from, and any of it can be overridden per job.
+
+The rules are written in English and the terms they cite are not: an instruction
+is followed more reliably in English, while the words the audience expects to
+hear are the output itself and only exist in the target language. Neither half
+belongs in an interface catalogue — this is what the app translates *with*, not
+text it shows. `label_code` is the exception, and it is only a key.
 """
 
 from __future__ import annotations
@@ -27,7 +33,9 @@ TERM_SEPARATORS = ("→", "->", "=>", "=")
 @dataclass(frozen=True)
 class TranslationStyle:
     key: str
-    label: str
+    # An interface key, resolved by the client. The rules below are prompt text
+    # and stay exactly as written.
+    label_code: str
     rules: tuple[str, ...]
     terms: tuple[tuple[str, str], ...] = ()
 
@@ -37,7 +45,6 @@ class StyleBrief:
     """The resolved style for one translation run."""
 
     key: str
-    label: str
     rules: tuple[str, ...]
     terms: tuple[tuple[str, str], ...]
 
@@ -49,28 +56,36 @@ class StyleBrief:
 
 
 _BASE_RULES = (
-    "Giữ văn phong tự nhiên như người Việt nói, không dịch bám từng chữ.",
-    "Câu ngắn gọn để kịp đọc trong thời lượng của cue.",
+    "Write each line the way a native speaker of the target language would say "
+    "it out loud, not as a word-for-word rendering of the source.",
+    "Keep lines short enough to be read within the cue's own duration; when the "
+    "source is wordy, cut filler rather than compress meaning.",
 )
 
 STYLES: dict[str, TranslationStyle] = {
     STYLE_NEUTRAL: TranslationStyle(
         key=STYLE_NEUTRAL,
-        label="Trung tính",
+        label_code="style.neutral",
         rules=_BASE_RULES,
     ),
     "han_viet": TranslationStyle(
         key="han_viet",
-        label="Hán Việt (phim Trung)",
+        label_code="style.hanViet",
         rules=_BASE_RULES
         + (
-            "Phim Hoa ngữ: ưu tiên từ Hán Việt mà khán giả Việt đã quen, không "
-            "Việt hóa hoàn toàn.",
-            "Giữ nguyên cách xưng hô đặc trưng — đại ca, bệ hạ, sư phụ, tiểu thư, "
-            "công tử, cô nương, tiền bối — không đổi thành anh cả, vua, thầy, cô gái.",
-            "Tên người và tên môn phái đọc theo âm Hán Việt, nhất quán suốt phim.",
-            "Thuật ngữ võ hiệp/tiên hiệp giữ dạng Hán Việt: nội lực, khinh công, "
-            "tu luyện, linh khí, độ kiếp.",
+            "This is a Chinese-language film for a Vietnamese audience: prefer "
+            "the Sino-Vietnamese (Hán Việt) wording viewers already expect, and "
+            "do not nativise it into everyday modern Vietnamese.",
+            "Keep the genre's forms of address exactly as the audience knows "
+            "them — đại ca, bệ hạ, sư phụ, tiểu thư, công tử, cô nương, tiền "
+            "bối — and never flatten them into anh cả, vua, thầy, cô gái.",
+            "Read personal names, titles and sect names with their "
+            "Sino-Vietnamese pronunciation, and keep each one identical for the "
+            "whole film once you have chosen it.",
+            "Keep wuxia and xianxia terminology in its Sino-Vietnamese form: "
+            "nội lực, khinh công, tu luyện, linh khí, độ kiếp.",
+            "Apply the same convention to terms that are not in the glossary "
+            "yet: choose the Sino-Vietnamese reading, then reuse it.",
         ),
         terms=(
             ("大哥", "đại ca"),
@@ -96,14 +111,17 @@ STYLES: dict[str, TranslationStyle] = {
     ),
     "korean": TranslationStyle(
         key="korean",
-        label="Giữ oppa, sunbae (phim Hàn)",
+        label_code="style.korean",
         rules=_BASE_RULES
         + (
-            "Phim Hàn: giữ nguyên cách gọi tiếng Hàn mà khán giả Việt đã quen "
-            "(oppa, unnie, noona, hyung, sunbae, hoobae, ahjussi, ahjumma), không "
-            "đổi thành anh/chị/cô/chú.",
-            "Kính ngữ -nim giữ nguyên khi đi kèm chức danh: giám đốc-nim, bác sĩ-nim.",
-            "Chỉ dùng đại từ tiếng Việt khi câu không có cách gọi đặc trưng nào.",
+            "This is a Korean drama: keep the Korean forms of address the "
+            "audience already knows — oppa, unnie, noona, hyung, sunbae, "
+            "hoobae, ahjussi, ahjumma — instead of replacing them with the "
+            "target language's own kinship pronouns.",
+            "Keep the honorific -nim attached to a title, as in giám đốc-nim or "
+            "bác sĩ-nim.",
+            "Fall back to an ordinary pronoun only for lines that carry no such "
+            "form of address at all.",
         ),
         terms=(
             ("오빠", "oppa"),
@@ -120,13 +138,13 @@ STYLES: dict[str, TranslationStyle] = {
     ),
     "japanese": TranslationStyle(
         key="japanese",
-        label="Giữ senpai, -san (phim Nhật)",
+        label_code="style.japanese",
         rules=_BASE_RULES
         + (
-            "Phim/anime Nhật: giữ hậu tố kính ngữ -san, -kun, -chan, -sama thay vì "
-            "dịch sang tiếng Việt.",
-            "Giữ các cách gọi quen thuộc: senpai, kouhai, sensei, onii-chan, "
-            "onee-chan.",
+            "This is a Japanese film or anime: keep the honorific suffixes -san, "
+            "-kun, -chan and -sama on the name rather than translating them away.",
+            "Keep the forms of address the audience knows in their romanised "
+            "Japanese: senpai, kouhai, sensei, onii-chan, onee-chan.",
         ),
         terms=(
             ("先輩", "senpai"),
@@ -142,24 +160,26 @@ STYLES: dict[str, TranslationStyle] = {
     ),
     "genz": TranslationStyle(
         key="genz",
-        label="GenZ, khẩu ngữ",
+        label_code="style.genz",
         rules=_BASE_RULES
         + (
-            "Giọng trẻ, khẩu ngữ như phụ đề fansub: xưng hô thoải mái, câu ngắn, "
-            "dùng được tiếng lóng phổ biến (xỉu, chill, cạn lời, u là trời) khi "
-            "đúng ngữ cảnh.",
-            "Không lạm dụng tiếng lóng ở cảnh nghiêm túc, không chèn emoji, không "
-            "viết tắt kiểu chat.",
+            "Use the young, colloquial register of a fansub: relaxed forms of "
+            "address, short sentences, and widely understood slang where the "
+            "scene invites it — in Vietnamese that means words like xỉu, chill, "
+            "cạn lời, u là trời.",
+            "Drop the slang for serious scenes, and never add emoji or "
+            "chat-style abbreviations.",
         ),
     ),
     "formal": TranslationStyle(
         key="formal",
-        label="Trang trọng (tài liệu, tin tức)",
+        label_code="style.formal",
         rules=_BASE_RULES
         + (
-            "Văn phong trang trọng, chuẩn mực, hợp phim tài liệu và bản tin.",
-            "Không dùng tiếng lóng, hạn chế khẩu ngữ, giữ thuật ngữ chuyên ngành "
-            "chính xác.",
+            "Use a formal, standard register suited to documentaries and news "
+            "broadcasts.",
+            "No slang, little colloquial phrasing, and domain terminology kept "
+            "precise rather than paraphrased.",
         ),
     ),
 }
@@ -175,10 +195,10 @@ LANGUAGE_STYLES = {
 
 
 def style_options() -> list[dict[str, str]]:
-    """The picker the UI renders, auto first."""
+    """The picker the UI renders, auto first — keys only, never rendered text."""
 
-    return [{"value": STYLE_AUTO, "label": "Tự động theo ngôn ngữ nguồn"}] + [
-        {"value": style.key, "label": style.label} for style in STYLES.values()
+    return [{"value": STYLE_AUTO, "label_code": "style.auto"}] + [
+        {"value": style.key, "label_code": style.label_code} for style in STYLES.values()
     ]
 
 
@@ -243,7 +263,6 @@ def build_style_brief(
 
     return StyleBrief(
         key=style.key,
-        label=style.label,
         rules=style.rules + tuple(note_rules),
         terms=tuple(merged.items()),
     )

@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 
+from ..messages import Message
 from ..subtitles import strip_speaker_labels
 
 # uuid4().hex — anything else in a path parameter is a probe, not a job.
@@ -46,12 +47,15 @@ def make_progress(
     *,
     current: int = 0,
     total: int | None = None,
-    message: str = "",
+    message: Message | None = None,
 ) -> dict:
     """A progress report for a phase.
 
     `total` is None while a phase cannot know its own size — Deepgram is one
     opaque request, so it reports a phase and a message but no ratio.
+
+    `message` is a code and its params, not a sentence: this dict is streamed
+    straight to the browser, which is where it becomes text.
     """
 
     ratio = None
@@ -62,7 +66,7 @@ def make_progress(
         "current": current,
         "total": total,
         "ratio": ratio,
-        "message": message,
+        "message": message.as_dict() if message is not None else None,
     }
 
 

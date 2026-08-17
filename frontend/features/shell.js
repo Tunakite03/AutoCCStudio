@@ -3,6 +3,7 @@
 import { $, $$, capturePointer } from "../core/dom.js";
 import { clamp } from "../core/format.js";
 import { toast } from "../core/feedback.js";
+import { LOCALES, currentLocale, setLocale, t } from "../core/i18n.js";
 import { timeline } from "./timeline-view.js";
 import { acceptVideoFile, importSubtitleFile } from "./pipeline.js";
 
@@ -157,13 +158,31 @@ function initGlobalDrop() {
     if (!file) return;
     if (/\.(srt|vtt)$/i.test(file.name)) return importSubtitleFile(file);
 
-    // Mirror the drop into the file input so "Tạo phụ đề" has something to send.
+    // Mirror the drop into the file input so the run button has something to send.
     const transfer = new DataTransfer();
     transfer.items.add(file);
     $("#video-file").files = transfer.files;
     acceptVideoFile(file);
-    toast("Đã nạp video — xem trước ngay. Bấm “Tạo phụ đề” khi muốn chạy AI.", "info");
+    toast(t("toast.videoDropped"), "info");
   });
+}
+
+/* ── Interface language ───────────────────────────────────────── */
+
+/** Built here rather than in the markup so the list stays with the catalogue. */
+function initLocalePicker() {
+  const select = $("#ui-locale");
+  if (!select) return;
+  select.replaceChildren(
+    ...LOCALES.map(({ code, name }) => {
+      const option = document.createElement("option");
+      option.value = code;
+      option.textContent = name;
+      return option;
+    }),
+  );
+  select.value = currentLocale();
+  select.addEventListener("change", (event) => setLocale(event.target.value));
 }
 
 export function mountShell() {
@@ -171,6 +190,7 @@ export function mountShell() {
   loadLayout();
   initSplitters();
   initGlobalDrop();
+  initLocalePicker();
 
   $("#theme-btn").addEventListener("click", () => {
     applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");

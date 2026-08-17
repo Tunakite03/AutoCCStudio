@@ -10,6 +10,7 @@ import { api } from '../core/api.js';
 import { confirmAction } from '../core/confirm.js';
 import { reportError, setStatus, toast } from '../core/feedback.js';
 import { formatDuration, formatFileSize, formatRelativeTime } from '../core/format.js';
+import { currentLocale, t } from '../core/i18n.js';
 import { on, state } from '../core/store.js';
 import { showScreen } from '../core/router.js';
 import { adoptJob, forgetJob, stopEvents, watchJob } from './jobs.js';
@@ -60,29 +61,37 @@ function renderStats() {
      const attention = projects.filter(needsAttention).length;
 
      $('#stat-projects').textContent = String(projects.length);
-     $('#stat-projects-note').textContent = attention ? `${withVideo} có video · ${attention} cần xem lại` : `${withVideo} có video`;
+     $('#stat-projects-note').textContent = attention
+          ? t('dash.withVideoAndAttention', { video: withVideo, attention })
+          : t('dash.withVideo', { video: withVideo });
 
      $('#stat-duration').textContent = formatDuration(totalDuration);
-     $('#stat-duration-note').textContent = `${projects.filter((item) => item.cue_count).length} project có phụ đề`;
+     $('#stat-duration-note').textContent = t('dash.projectsWithSubtitles', {
+          count: projects.filter((item) => item.cue_count).length,
+     });
 
-     $('#stat-cues-total').textContent = totalCues.toLocaleString('vi-VN');
+     $('#stat-cues-total').textContent = totalCues.toLocaleString(currentLocale());
      const share = totalCues ? Math.round((totalTranslated / totalCues) * 100) : 0;
-     $('#stat-cues-note').textContent = `${share}% đã dịch`;
+     $('#stat-cues-note').textContent = t('dash.translatedShare', { percent: share });
 
      $('#stat-disk').textContent = formatFileSize(totalBytes);
      const reclaimable = projects.filter(needsAttention).reduce((sum, item) => sum + item.size_bytes, 0);
-     $('#stat-disk-note').textContent = reclaimable ? `${formatFileSize(reclaimable)} ở project cần xem lại` : 'workspace gọn gàng';
+     $('#stat-disk-note').textContent = reclaimable
+          ? t('dash.reclaimable', { size: formatFileSize(reclaimable) })
+          : t('dash.tidy');
 
-     $('#dash-subtitle').textContent = projects.length ? `${projects.length} project trong workspace cục bộ` : 'Workspace đang trống';
+     $('#dash-subtitle').textContent = projects.length
+          ? t('dash.inWorkspace', { count: projects.length })
+          : t('dash.emptyWorkspace');
 }
 
 function statusOf(project) {
-     if (project.status === 'processing') return { label: 'Đang xử lý', tone: 'busy' };
-     if (project.status === 'error') return { label: 'Lỗi', tone: 'error' };
-     if (project.status === 'cancelled') return { label: 'Đã dừng', tone: 'idle' };
-     if (!project.cue_count) return { label: 'Chưa có cue', tone: 'idle' };
-     if (isTranslated(project)) return { label: 'Đã dịch', tone: 'done' };
-     return { label: 'Chưa dịch', tone: 'idle' };
+     if (project.status === 'processing') return { label: t('status.processing'), tone: 'busy' };
+     if (project.status === 'error') return { label: t('status.error'), tone: 'error' };
+     if (project.status === 'cancelled') return { label: t('status.stopped'), tone: 'idle' };
+     if (!project.cue_count) return { label: t('status.noCues'), tone: 'idle' };
+     if (isTranslated(project)) return { label: t('status.translated'), tone: 'done' };
+     return { label: t('status.untranslated'), tone: 'idle' };
 }
 
 /* `project-card`, `thumb-mark`, `project-status` and `progress-fill` stay as
@@ -104,7 +113,7 @@ function buildCard(project) {
      /* Thumbnail */
      const media = element('button', 'relative block w-full aspect-video overflow-hidden bg-void cursor-pointer');
      media.type = 'button';
-     media.title = 'Mở project';
+     media.title = t('card.openProject');
      if (project.video_available) {
           const image = element('img', 'w-full h-full object-cover block');
           image.loading = 'lazy';
@@ -134,12 +143,19 @@ function buildCard(project) {
      /* Body */
      const body = element('div', 'grid gap-[5px] px-3 pt-[11px] pb-[9px]');
      // Two-line clamp on purpose: card titles are file names and run long.
-     const title = element('h3', 'overflow-hidden text-[12.5px] font-semibold leading-[1.35] text-ellipsis line-clamp-2', project.name);
-     title.title = project.name;
+     // A project the server could not name is still a project — the placeholder
+     // belongs here, in the interface language.
+     const name = project.name || t('project.untitled');
+     const title = element('h3', 'overflow-hidden text-[12.5px] font-semibold leading-[1.35] text-ellipsis line-clamp-2', name);
+     title.title = name;
 
      const meta = element('p', 'mono text-muted text-[10.5px]');
      const language = project.detected_language || project.source_language || '—';
-     meta.textContent = `${project.cue_count} cue · ${formatDuration(project.duration_seconds)} · ${language}`;
+     meta.textContent = t('card.meta', {
+          cues: project.cue_count,
+          duration: formatDuration(project.duration_seconds),
+          language,
+     });
 
      body.append(title, meta);
 
@@ -148,12 +164,12 @@ function buildCard(project) {
           const done = Math.round((project.translated_count / project.cue_count) * 100);
           const bar = element('div', 'h-[3px] mt-[3px] overflow-hidden rounded-[2px] bg-raised-hi');
           bar.setAttribute('role', 'img');
-          bar.setAttribute('aria-label', `Đã dịch ${done}%`);
+          bar.setAttribute('aria-label', t('card.translatedAria', { percent: done }));
           const fill = element('span', 'progress-fill block h-full rounded-[2px] bg-accent');
           fill.style.width = `${done}%`;
           if (done === 100) fill.classList.add('is-complete');
           bar.appendChild(fill);
-          const legend = element('span', 'mono text-faint text-[9.5px]', `${done}% dịch`);
+          const legend = element('span', 'mono text-faint text-[9.5px]', t('card.translatedLegend', { percent: done }));
           body.append(bar, legend);
      }
 
@@ -162,7 +178,7 @@ function buildCard(project) {
      footer.append(element('span', '', formatRelativeTime(project.updated_at)), element('span', 'mono mr-auto', formatFileSize(project.size_bytes)));
 
      const actions = element('div', 'flex items-center gap-[3px]');
-     const open = element('button', CARD_TOOL, 'Mở');
+     const open = element('button', CARD_TOOL, t('card.open'));
      open.type = 'button';
      open.addEventListener('click', () => openProject(project.id));
      const remove = element(
@@ -171,8 +187,8 @@ function buildCard(project) {
                'text-text-dim transition-[color,background-color,border-color] duration-[120ms] hover:bg-raised-hi',
      );
      remove.type = 'button';
-     remove.title = 'Xóa project';
-     remove.setAttribute('aria-label', `Xóa ${project.name}`);
+     remove.title = t('card.delete');
+     remove.setAttribute('aria-label', t('card.deleteAria', { name }));
      remove.innerHTML = '<svg class="w-3.75 h-3.75" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
      remove.addEventListener('click', () => askDelete(project));
      actions.append(open, remove);
@@ -201,16 +217,14 @@ function cardFor(project) {
 /** Grid only — the stats above it read the whole workspace, not the filter. */
 function renderGrid() {
      const visible = visibleProjects();
-     $('#dash-count').textContent = `${visible.length} project`;
+     $('#dash-count').textContent = t('dash.count', { count: visible.length });
      grid.replaceChildren(...visible.map(cardFor));
 
      emptyNote.hidden = visible.length > 0;
      if (!visible.length) {
           const filtered = projects.length > 0;
-          $('#dash-empty-title').textContent = filtered ? 'Không có project nào khớp' : 'Chưa có project nào';
-          $('#dash-empty-note').textContent = filtered
-               ? 'Thử bỏ bộ lọc hoặc xóa từ khóa tìm kiếm.'
-               : 'Tạo phụ đề cho video đầu tiên để nó xuất hiện ở đây.';
+          $('#dash-empty-title').textContent = t(filtered ? 'dash.noMatchTitle' : 'dash.emptyTitle');
+          $('#dash-empty-note').textContent = t(filtered ? 'dash.noMatchNote' : 'dash.emptyNote');
      }
 }
 
@@ -227,7 +241,7 @@ async function openProject(jobId) {
           stopEvents();
           adoptJob(job);
           showScreen('editor');
-          setStatus(`Đã mở ${job.video_name || job.subtitle_name || 'project'}`);
+          setStatus(t('status.opened', { name: job.video_name || job.subtitle_name || t('project.fallbackName') }));
           if (job.status === 'processing') watchJob(job.id);
      } catch (error) {
           reportError(error);
@@ -236,11 +250,11 @@ async function openProject(jobId) {
 
 async function askDelete(project) {
      const confirmed = await confirmAction({
-          title: 'Xóa project?',
-          target: project.name,
-          note: 'Video, phụ đề và metadata trong thư mục project sẽ bị xóa khỏi đĩa. Không hoàn tác được.',
-          confirmLabel: 'Xóa vĩnh viễn',
-          cancelLabel: 'Giữ lại',
+          title: t('confirm.deleteTitle'),
+          target: project.name || t('project.untitled'),
+          note: t('confirm.deleteNote'),
+          confirmLabel: t('confirm.deleteOk'),
+          cancelLabel: t('confirm.deleteCancel'),
      });
      if (!confirmed) return;
      try {
@@ -248,7 +262,7 @@ async function askDelete(project) {
           if (state.job?.id === project.id) forgetJob();
           projects = projects.filter((item) => item.id !== project.id);
           render();
-          toast(`Đã xóa ${project.name}`, 'success');
+          toast(t('toast.projectDeleted', { name: project.name || t('project.untitled') }), 'success');
      } catch (error) {
           reportError(error);
      }

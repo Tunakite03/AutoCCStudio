@@ -9,6 +9,7 @@
 
 import { $, element } from "../core/dom.js";
 import { charsPerSecond, clamp, cpsSeverity, cueDuration, shortTimecode } from "../core/format.js";
+import { t } from "../core/i18n.js";
 import { cueAt, cues, on, setSelection, state } from "../core/store.js";
 import { seek } from "./transport.js";
 
@@ -65,7 +66,7 @@ function paintRow(row, cue, index) {
 export function renderList() {
   const list = cues();
   $("#cue-count").textContent = String(list.length);
-  $("#status-cues").textContent = `${list.length} cue`;
+  $("#status-cues").textContent = t("status.cues", { count: list.length });
 
   if (!list.length) {
     rows.length = 0;

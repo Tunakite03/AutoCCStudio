@@ -1,5 +1,7 @@
 /** Shared formatting and caption-quality helpers. */
 
+import { currentLocale, t } from "./i18n.js";
+
 export const MIN_CUE_DURATION = 0.12;
 
 /** Reading speed thresholds used by broadcast subtitling guides (chars per second). */
@@ -73,24 +75,25 @@ export function formatDuration(seconds) {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${minutes}:${pad(secs)}`;
 }
 
+/** Each step is the point at which the unit below it stops being readable. */
 const RELATIVE_STEPS = [
-  [60, "giây"],
-  [3600, "phút"],
-  [86400, "giờ"],
-  [604800, "ngày"],
+  [60, "second", 1],
+  [3600, "minute", 60],
+  [86400, "hour", 3600],
+  [604800, "day", 86400],
 ];
 
-/** "3 phút trước" — precise enough for a project list, no locale data needed. */
+/** "3 phút trước" / "3 minutes ago" — Intl owns the wording and the plural. */
 export function formatRelativeTime(epochSeconds) {
-  if (!epochSeconds) return "—";
+  if (!epochSeconds) return t("time.never");
+  const locale = currentLocale();
   const elapsed = Math.max(0, Date.now() / 1000 - epochSeconds);
-  if (elapsed < 45) return "vừa xong";
-  let previous = 1;
-  for (const [limit, label] of RELATIVE_STEPS) {
-    if (elapsed < limit) return `${Math.round(elapsed / previous)} ${label} trước`;
-    previous = limit;
+  if (elapsed < 45) return t("time.justNow");
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  for (const [limit, unit, divisor] of RELATIVE_STEPS) {
+    if (elapsed < limit) return relative.format(-Math.round(elapsed / divisor), unit);
   }
-  return new Date(epochSeconds * 1000).toLocaleDateString("vi-VN");
+  return new Date(epochSeconds * 1000).toLocaleDateString(locale);
 }
 
 export function formatFileSize(bytes) {

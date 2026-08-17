@@ -1,0 +1,20 @@
+# Dependencies and environments
+.venv/
+venv/
+node_modules/
+
+# Runtime and generated files
+runtime/
+frontend/styles.css
+*.exe
+
+# Testing & Cache
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# IDE / System
+.vscode/
+.claude/
+.codebase-memory/
+.git/

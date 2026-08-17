@@ -1,10 +1,49 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-.pytest_cache/
+*$py.class
+
+# Virtual environments
 .venv/
 venv/
+env/
+ENV/
+
+# Project runtime & sensitive files
 runtime/
 .env
-.codebase-memory/
-tailwindcss.exe
+.env.*
+!.env.example
 
+# Binaries & executable tools
+tailwindcss.exe
+*.exe
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Linter & type checking caches
+.ruff_cache/
+.mypy_cache/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs & Editor workspaces
+.idea/
+.claude/
+.codebase-memory/

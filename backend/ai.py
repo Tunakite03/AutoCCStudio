@@ -21,6 +21,7 @@ from . import httpclient
 from .apikeys import CredentialPool
 from .cancellation import OperationCancelled
 from .config import get_logger, settings
+from .messages import CodedError, Message
 from .translation_style import STYLE_AUTO, StyleBrief, build_style_brief
 from .media import extract_transcription_audio, media_duration_seconds
 from .subtitles import (
@@ -38,7 +39,7 @@ from .subtitles import (
 )
 
 
-class AIProviderError(RuntimeError):
+class AIProviderError(CodedError):
     """Raised when an AI provider is unavailable or returns invalid output."""
 
 
@@ -48,11 +49,21 @@ class AIResponseFormatError(AIProviderError):
 
 logger = get_logger("ai")
 
+# Which run a provider error belongs to, for the message that reports it.
+OP_TRANSCRIBE = Message("op.transcribe")
+OP_TRANSLATE = Message("op.translate")
+OP_SPEAKER_ANALYSIS = Message("op.speakerAnalysis")
+
 # Reports (done, total_or_None, message) as a phase advances.
-ProgressCallback = Callable[[int, int | None, str], None]
+ProgressCallback = Callable[[int, int | None, Message], None]
 
 
-def _report(on_progress: ProgressCallback | None, current: int, total: int | None, message: str) -> None:
+def _report(
+    on_progress: ProgressCallback | None,
+    current: int,
+    total: int | None,
+    message: Message,
+) -> None:
     if on_progress is not None:
         on_progress(current, total, message)
 
@@ -62,9 +73,7 @@ def _whisper_model(model_size: str, device: str, compute_type: str):
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
-        raise AIProviderError(
-            "Chưa cài faster-whisper. Chạy: pip install -r requirements.txt"
-        ) from exc
+        raise AIProviderError("err.ai.whisperMissing") from exc
     return WhisperModel(model_size, device=device, compute_type=compute_type)
 
 
@@ -284,9 +293,7 @@ def transcribe_video(
             on_progress=on_progress,
         )
     if transcription_provider not in {"faster_whisper", "whisper"}:
-        raise AIProviderError(
-            "TRANSCRIPTION_PROVIDER phải là faster_whisper hoặc deepgram"
-        )
+        raise AIProviderError("err.ai.badTranscriptionProvider")
 
     model = _whisper_model(
         model_size or settings.whisper_model,
@@ -297,7 +304,7 @@ def transcribe_video(
     if language and language.lower() not in {"auto", "multi"}:
         whisper_lang = language.split("-")[0].lower()
 
-    _report(on_progress, 0, None, "Đang nạp model nhận dạng")
+    _report(on_progress, 0, None, Message("progress.loadingModel"))
     try:
         media_duration = media_duration_seconds(video_path)
         try:
@@ -347,7 +354,7 @@ def transcribe_video(
                 on_progress,
                 int(end),
                 int(media_duration) if media_duration else None,
-                "Đang nhận dạng lời thoại",
+                Message("progress.transcribing"),
             )
 
             words = getattr(segment, "words", None)
@@ -393,7 +400,7 @@ def transcribe_video(
         # a Whisper failure and must not be relabelled as one.
         raise
     except Exception as exc:  # provider errors vary by media/model backend
-        raise AIProviderError(f"Whisper không thể xử lý video: {exc}") from exc
+        raise AIProviderError("err.ai.whisperFailed", cause=str(exc)) from exc
     return cues, getattr(info, "language", None)
 
 
@@ -423,12 +430,10 @@ def _request_deepgram(
     on_progress: ProgressCallback | None = None,
 ) -> dict:
     if not settings.deepgram_api_key.strip():
-        raise AIProviderError(
-            "Chưa cấu hình DEEPGRAM_API_KEY. Thêm key vào file .env rồi khởi động lại app."
-        )
+        raise AIProviderError("err.ai.deepgramKeyMissing")
 
     url = f"{settings.deepgram_base_url.rstrip('/')}/v1/listen?{urlencode(params)}"
-    _report(on_progress, 0, None, "Đang tách audio để tải lên")
+    _report(on_progress, 0, None, Message("progress.extractingAudio"))
     extracted_audio = extract_transcription_audio(video_path)
     upload_path = extracted_audio if extracted_audio is not None else video_path
 
@@ -440,7 +445,7 @@ def _request_deepgram(
         handles.append(handle)
         return handle
 
-    _report(on_progress, 0, None, "Đang gửi audio tới Deepgram")
+    _report(on_progress, 0, None, Message("progress.uploadingAudio", {"provider": "Deepgram"}))
     try:
         response = httpclient.post(
             url,
@@ -454,7 +459,8 @@ def _request_deepgram(
         )
         payload = httpclient.json_body(response, "Deepgram")
     except httpclient.HTTPClientError as exc:
-        raise AIProviderError(str(exc)) from exc
+        # Adopted, not restated: the HTTP layer already knows exactly what failed.
+        raise AIProviderError(exc.message) from exc
     finally:
         for handle in handles:
             handle.close()
@@ -462,8 +468,8 @@ def _request_deepgram(
             extracted_audio.unlink(missing_ok=True)
 
     if not isinstance(payload, dict):
-        raise AIProviderError("Deepgram trả về JSON không hợp lệ")
-    _report(on_progress, 0, None, "Đang xử lý kết quả từ Deepgram")
+        raise AIProviderError("err.ai.deepgramBadJson")
+    _report(on_progress, 0, None, Message("progress.processingResult", {"provider": "Deepgram"}))
     return payload
 
 
@@ -611,9 +617,9 @@ def _deepgram_cues(payload: dict, media_duration: float | None) -> list[dict]:
     try:
         utterances = payload["results"]["utterances"]
     except (KeyError, TypeError) as exc:
-        raise AIProviderError("Deepgram response thiếu results.utterances") from exc
+        raise AIProviderError("err.ai.deepgramNoUtterances") from exc
     if not isinstance(utterances, list):
-        raise AIProviderError("Deepgram response có utterances không hợp lệ")
+        raise AIProviderError("err.ai.deepgramBadUtterances")
 
     cues: list[dict] = []
     # Deepgram ends an utterance at a pause *or* at a smart-formatted sentence
@@ -714,7 +720,7 @@ def transcribe_video_deepgram(
 ) -> tuple[list[dict], str | None]:
     selected_model = (model or settings.deepgram_model).strip()
     if not selected_model:
-        raise AIProviderError("Cần chọn model Deepgram trước khi nhận dạng")
+        raise AIProviderError("err.ai.deepgramModelMissing")
     params = {
         "model": selected_model,
         "smart_format": "true",
@@ -730,7 +736,7 @@ def transcribe_video_deepgram(
     payload = _request_deepgram(video_path, params, on_progress=on_progress)
     cues = _deepgram_cues(payload, media_duration_seconds(video_path))
     if not cues:
-        raise AIProviderError("Deepgram không tìm thấy lời thoại có timestamp trong video")
+        raise AIProviderError("err.ai.deepgramNoSpeech")
     return cues, _deepgram_detected_language(payload, language)
 
 
@@ -790,14 +796,14 @@ def _llm_completion(
     messages: list[dict[str, str]],
     *,
     temperature: float,
-    operation: str,
+    operation: Message,
     model: str | None = None,
 ) -> str:
     if not settings.llm_base_url.strip():
-        raise AIProviderError(f"Chưa cấu hình LLM_BASE_URL cho {operation}")
+        raise AIProviderError("err.ai.llmBaseUrlMissing", operation=operation)
     selected_model = (model or settings.llm_model).strip()
     if not selected_model:
-        raise AIProviderError(f"Chưa cấu hình model LLM cho {operation}")
+        raise AIProviderError("err.ai.llmModelMissing", operation=operation)
 
     _wait_for_llm_slot()
     try:
@@ -818,14 +824,16 @@ def _llm_completion(
         )
         body = httpclient.json_body(response, "LLM")
     except httpclient.HTTPClientError as exc:
-        raise AIProviderError(f"{exc} (khi {operation})") from exc
+        # The cause travels as a message of its own, so the client can say both
+        # what was running and precisely how the provider failed.
+        raise AIProviderError(
+            "err.ai.llmRequestFailed", operation=operation, cause=exc.message
+        ) from exc
 
     try:
         return str(body["choices"][0]["message"]["content"])
     except (KeyError, IndexError, TypeError) as exc:
-        raise AIProviderError(
-            f"Phản hồi LLM thiếu choices[0].message.content khi {operation}"
-        ) from exc
+        raise AIProviderError("err.ai.llmMalformedResponse", operation=operation) from exc
 
 
 def _resolve_transformers_device(value: str) -> int:
@@ -842,23 +850,17 @@ def _resolve_transformers_device(value: str) -> int:
     try:
         return int(normalized)
     except ValueError as exc:
-        raise AIProviderError(
-            "TRANSFORMERS_DEVICE phải là auto, cpu hoặc số GPU"
-        ) from exc
+        raise AIProviderError("err.ai.badTransformersDevice") from exc
 
 
 @lru_cache(maxsize=2)
 def _transformers_pipeline(model_name: str, device_name: str):
     if not model_name.strip():
-        raise AIProviderError(
-            "TRANSLATION_MODEL là bắt buộc khi TRANSLATION_PROVIDER=transformers"
-        )
+        raise AIProviderError("err.ai.transformersModelRequired")
     try:
         from transformers import pipeline
     except ImportError as exc:
-        raise AIProviderError(
-            "Chưa cài transformers/torch cho local translation"
-        ) from exc
+        raise AIProviderError("err.ai.transformersMissing") from exc
     try:
         return pipeline(
             "translation",
@@ -866,7 +868,9 @@ def _transformers_pipeline(model_name: str, device_name: str):
             device=_resolve_transformers_device(device_name),
         )
     except Exception as exc:
-        raise AIProviderError(f"Không tải được translation model {model_name}: {exc}") from exc
+        raise AIProviderError(
+            "err.ai.transformersLoadFailed", model=model_name, cause=str(exc)
+        ) from exc
 
 
 def _translate_batch_transformers(
@@ -878,14 +882,12 @@ def _translate_batch_transformers(
     expected_language = settings.transformers_target_language.strip().casefold()
     if expected_language and target_language.strip().casefold() != expected_language:
         raise AIProviderError(
-            "Translation model local hiện chỉ được cấu hình cho "
-            f"{settings.transformers_target_language}"
+            "err.ai.transformersTargetMismatch",
+            language=settings.transformers_target_language,
         )
     chosen_model = (model_name or settings.translation_model).strip()
     if not chosen_model:
-        raise AIProviderError(
-            "TRANSLATION_MODEL là bắt buộc khi TRANSLATION_PROVIDER=transformers"
-        )
+        raise AIProviderError("err.ai.transformersModelRequired")
     translator = _transformers_pipeline(
         chosen_model,
         settings.transformers_device,
@@ -893,16 +895,16 @@ def _translate_batch_transformers(
     try:
         results = translator(texts, max_length=512)
     except Exception as exc:
-        raise AIProviderError(f"Local translation model không xử lý được cue: {exc}") from exc
+        raise AIProviderError("err.ai.transformersFailed", cause=str(exc)) from exc
     if isinstance(results, dict):
         results = [results]
     try:
         return [str(item["translation_text"]).strip() for item in results]
     except (KeyError, TypeError) as exc:
-        raise AIProviderError("Local translation model trả về dữ liệu không hợp lệ") from exc
+        raise AIProviderError("err.ai.transformersBadOutput") from exc
 
 
-def _extract_json_value(content: str, error_subject: str = "Model"):
+def _extract_json_value(content: str, error_code: str = "err.ai.notJson"):
     cleaned = content.strip()
     if cleaned.startswith("```"):
         lines = cleaned.splitlines()
@@ -921,9 +923,7 @@ def _extract_json_value(content: str, error_subject: str = "Model"):
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        raise AIResponseFormatError(
-            f"{error_subject} không trả về JSON hợp lệ"
-        ) from exc
+        raise AIResponseFormatError(error_code) from exc
 
 
 def _clean_dialogue_layout(text: str) -> str:
@@ -962,7 +962,7 @@ def _extract_dialogue_map(
     content: str,
     targets: list[tuple[int, dict]],
 ) -> dict[int, str]:
-    value = _extract_json_value(content, "AI phân tích lượt thoại")
+    value = _extract_json_value(content, "err.ai.dialogueNotJson")
     target_ids = [index + 1 for index, _cue in targets]
     if isinstance(value, dict) and "results" in value:
         value = value["results"]
@@ -999,9 +999,7 @@ def _extract_dialogue_map(
                 results[cue_id] = text
         return results
 
-    raise AIResponseFormatError(
-        "AI phân tích lượt thoại không trả về object theo cue_id"
-    )
+    raise AIResponseFormatError("err.ai.dialogueBadShape")
 
 
 def _analyze_dialogue_batch(
@@ -1021,17 +1019,25 @@ def _analyze_dialogue_batch(
         ],
     }
     prompt = (
-        "Phân tích lượt thoại trong trường targets của JSON bên dưới. Dựa vào câu hỏi/"
-        "trả lời, đại từ, cách xưng hô và ngữ cảnh để nhận ra chỗ một người khác bắt đầu "
-        "nói. acoustic_speaker_turns là bằng chứng theo từng từ từ audio và các xuống "
-        "dòng có sẵn từ nguồn này phải được giữ nguyên. speaker_hint chỉ là gợi ý cho "
-        "giọng chính hoặc đầu cue. Với mỗi target, trả lại nguyên văn và chỉ chèn thêm "
-        "ký tự xuống dòng \\n tại ranh giới đổi người nói. Không thêm nhãn [1], [2], "
-        "[S1], gạch đầu dòng hay tên nhân vật. Không thêm, xóa, sửa hoặc đảo bất kỳ từ, "
-        "dấu câu hay ký tự nào khác. Nếu không chắc thì giữ nguyên. Chỉ trả về một JSON "
-        "object có key là cue_id dạng chuỗi và value là lời thoại, ví dụ "
-        '{"5":"Câu một.\\nCâu hai."}. Không bỏ sót, đổi hoặc thêm cue_id. '
-        "Hai trường context chỉ để tham khảo.\n\n"
+        "Mark the speaker turns inside the `targets` field of the JSON below.\n"
+        "- Work out where a different person starts speaking from the "
+        "question-and-answer flow, the pronouns, the forms of address and the "
+        "surrounding context.\n"
+        "- `acoustic_speaker_turns` is per-word evidence from the audio: every "
+        "line break that already comes from it must survive unchanged.\n"
+        "- `speaker_hint` is only a hint about the dominant voice, or about who "
+        "speaks at the start of the cue.\n"
+        "- Return each target verbatim, inserting nothing except a \\n newline "
+        "exactly where the speaker changes.\n"
+        "- Never add labels such as [1], [2] or [S1], leading dashes, or "
+        "character names.\n"
+        "- Never add, delete, reorder or alter any word, punctuation mark or "
+        "character.\n"
+        "- If you are not sure a line has two speakers, return it untouched.\n"
+        "- `context_before` and `context_after` are for reference only.\n"
+        "Reply with one JSON object keyed by cue_id as a string, whose values "
+        'are the dialogue, e.g. {"5":"First line.\\nSecond line."}. Return every '
+        "cue_id you were given and no others.\n\n"
         + json.dumps(request_data, ensure_ascii=False)
     )
     content = _llm_completion(
@@ -1039,14 +1045,14 @@ def _analyze_dialogue_batch(
             {
                 "role": "system",
                 "content": (
-                    "Bạn là bộ phân đoạn lượt thoại. Chỉ xuất JSON hợp lệ và tuyệt đối "
-                    "không sửa nội dung lời thoại."
+                    "You are a dialogue-turn segmenter. You emit valid JSON only, "
+                    "and you never change the dialogue itself."
                 ),
             },
             {"role": "user", "content": prompt},
         ],
         temperature=0.0,
-        operation="phân tích lượt thoại",
+        operation=OP_SPEAKER_ANALYSIS,
         model=settings.speaker_analysis_model or settings.llm_model,
     )
     return _extract_dialogue_map(content, targets)
@@ -1104,7 +1110,7 @@ def analyze_dialogue_turns(
         ),
     }
     size = max(1, int(batch_size))
-    _report(on_progress, 0, len(analyzed), "Đang phân tích lượt thoại")
+    _report(on_progress, 0, len(analyzed), Message("progress.analyzingTurns"))
     for offset in range(0, len(analyzed), size):
         end = min(offset + size, len(analyzed))
         targets = list(enumerate(analyzed[offset:end], start=offset))
@@ -1173,7 +1179,7 @@ def analyze_dialogue_turns(
                 )
             cue["text"] = proposed
 
-        _report(on_progress, end, len(analyzed), "Đang phân tích lượt thoại")
+        _report(on_progress, end, len(analyzed), Message("progress.analyzingTurns"))
 
     report["failed_cues"] = len(report["failed_cue_ids"])
     return (analyzed, report) if return_report else analyzed
@@ -1213,7 +1219,7 @@ def _extract_translation_map(content, line_ids: list[int]) -> dict[int, str]:
     """
 
     value = (
-        _extract_json_value(content, "Model dịch")
+        _extract_json_value(content, "err.ai.translationNotJson")
         if isinstance(content, str)
         else content
     )
@@ -1257,7 +1263,7 @@ def _extract_translation_map(content, line_ids: list[int]) -> dict[int, str]:
                 results[line_id] = text
         return results
 
-    raise AIResponseFormatError("Model dịch không trả về bản dịch theo id")
+    raise AIResponseFormatError("err.ai.translationBadShape")
 
 
 TRANSLATION_CONTEXT_BEFORE = 4
@@ -1337,40 +1343,46 @@ def _translate_lines_llm(
         request["context_after"] = [_line_payload(line) for line in context_after]
 
     prompt = (
-        "Bạn là biên dịch viên phụ đề phim. Dịch các dòng trong `lines` sang "
+        "You are a film subtitle translator. Translate the lines in `lines` into "
         f"{target_language}.\n"
-        "- Chỉ dịch `lines`. `context_before` (đã dịch), `context_after` và "
-        "`glossary` chỉ để hiểu mạch truyện, không dịch và không trả về.\n"
-        "- Lời thoại phải nối mạch với `context_before`: đại từ, xưng hô và cách "
-        "gọi tên phải nhất quán với những gì đã dịch trước đó.\n"
-        "- `speaker` là mã người nói; cùng mã là cùng một nhân vật, nên giữ "
-        "nguyên giọng điệu và cách xưng hô của nhân vật đó xuyên suốt.\n"
-        "- Mỗi khóa trong `lines` là một dòng phụ đề: dịch riêng từng khóa, "
-        "không gộp, không tách, không bỏ khóa nào. Một câu bị cắt qua hai dòng "
-        "thì dịch sao cho ghép lại vẫn thành câu.\n"
-        "- Không thêm nhãn người nói, không chú thích, không giải thích.\n"
-        "- Giữ nguyên tên riêng trừ khi `glossary` đã quy định cách gọi khác.\n"
-        "- Các mục đã có sẵn trong `glossary` là bắt buộc: dịch đúng như vậy, "
-        "không tự đổi sang cách gọi khác.\n"
+        "- Translate `lines` and nothing else. `context_before` (already "
+        "translated), `context_after` and `glossary` are there so you can follow "
+        "the story; never translate them and never return them.\n"
+        "- The dialogue has to run on from `context_before`: pronouns, forms of "
+        "address and the wording of names stay consistent with what was already "
+        "translated.\n"
+        "- `speaker` is a speaker id; the same id is the same character, so keep "
+        "that character's register and the way they address others stable "
+        "throughout.\n"
+        "- Every key in `lines` is one subtitle line: translate each key on its "
+        "own, merging none, splitting none, dropping none. Where one sentence is "
+        "cut across two lines, translate so that the two still read as one "
+        "sentence when joined.\n"
+        "- No speaker labels, no annotations, no explanations.\n"
+        "- Keep proper names as they are unless `glossary` already fixes another "
+        "form for them.\n"
+        "- Entries already present in `glossary` are binding: reuse them exactly "
+        "and never substitute wording of your own.\n"
         + "".join(f"- {rule}\n" for rule in style_rules)
-        + "Trả về JSON: {\"translations\": {khóa: bản dịch}, \"glossary\": "
-        "{nguyên bản: cách dịch chuẩn}}. Trong `glossary` chỉ thêm tên riêng, "
-        "cách xưng hô giữa các nhân vật và thuật ngữ sẽ còn lặp lại về sau.\n\n"
+        + 'Reply with JSON: {"translations": {key: translation}, "glossary": '
+        "{source term: agreed translation}}. Add to `glossary` only proper names, "
+        "the forms of address used between characters, and terminology that will "
+        "come up again later.\n\n"
         + json.dumps(request, ensure_ascii=False)
     )
     content = _llm_completion(
         [
             {
                 "role": "system",
-                "content": "Bạn chỉ xuất JSON hợp lệ, không dùng markdown fence.",
+                "content": "You output valid JSON only, with no markdown fence.",
             },
             {"role": "user", "content": prompt},
         ],
         temperature=0.2,
-        operation="dịch phụ đề",
+        operation=OP_TRANSLATE,
         model=model,
     )
-    value = _extract_json_value(content, "Model dịch")
+    value = _extract_json_value(content, "err.ai.translationNotJson")
     learned = value.get("glossary") if isinstance(value, dict) else None
     translations = _extract_translation_map(value, list(range(1, len(lines) + 1)))
     return translations, learned
@@ -1458,10 +1470,11 @@ def _translate_batch_llm(
 
     still_missing = _missing_translation_ids(results, line_ids)
     if still_missing:
-        shown = ", ".join(str(line_id) for line_id in still_missing[:5])
         raise AIProviderError(
-            f"Model không dịch được {len(still_missing)}/{len(line_ids)} dòng "
-            f"trong lô (dòng {shown})"
+            "err.ai.translationIncomplete",
+            missing=len(still_missing),
+            total=len(line_ids),
+            lines=", ".join(str(line_id) for line_id in still_missing[:5]),
         )
     return [results[line_id] for line_id in line_ids]
 
@@ -1567,7 +1580,7 @@ def translate_cues(
     """
 
     if not target_language.strip():
-        raise AIProviderError("Cần chọn ngôn ngữ đích trước khi dịch")
+        raise AIProviderError("err.ai.targetLanguageMissing")
     translated = [dict(cue) for cue in cues]
     lines: list[dict] = []
     for cue_index, cue in enumerate(translated):
@@ -1605,7 +1618,7 @@ def translate_cues(
     brief = build_style_brief(style, source_language, style_notes)
     logger.info(
         "translating %s of %s lines as %s (%s pinned terms)",
-        total - start, total, brief.label, len(brief.terms),
+        total - start, total, brief.key, len(brief.terms),
     )
     glossary: dict[str, str] = brief.glossary()
     for offset in range(start, total, size):
@@ -1626,7 +1639,9 @@ def translate_cues(
         )
         if len(translations) != len(batch):
             raise AIProviderError(
-                f"Model trả về {len(translations)} bản dịch cho {len(batch)} dòng"
+                "err.ai.translationCountMismatch",
+                returned=len(translations),
+                expected=len(batch),
             )
         for index, value in enumerate(translations, start=offset):
             results[index] = strip_speaker_labels(value).strip()

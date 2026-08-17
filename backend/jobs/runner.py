@@ -16,6 +16,7 @@ from typing import Callable, Iterator
 
 from ..cancellation import OperationCancelled, clear_stop_check, set_stop_check
 from ..config import get_logger
+from ..messages import CodedError, Message, raw
 from .model import (
     PHASE_QUEUED,
     STATUS_CANCELLED,
@@ -64,7 +65,7 @@ class JobContext:
         *,
         current: int = 0,
         total: int | None = None,
-        message: str = "",
+        message: Message | None = None,
     ) -> None:
         try:
             with self.store.edit(self.job_id, persist=False) as job:
@@ -120,7 +121,7 @@ class JobRunner:
         try:
             with self._store.edit(job_id, persist=False) as job:
                 job["progress"] = make_progress(
-                    PHASE_QUEUED, message="Đang chờ đến lượt xử lý"
+                    PHASE_QUEUED, message=Message("progress.queued")
                 )
         except JobNotFound:
             logger.info("job %s: %s not queued, project is gone", job_id, operation)
@@ -176,7 +177,9 @@ class JobRunner:
                 job["cancel_requested"] = False
                 if job.get("speaker_analysis_status") in {"pending", "processing"}:
                     job["speaker_analysis_status"] = "cancelled"
-                    job["speaker_analysis_error"] = "Đã dừng theo yêu cầu"
+                    job["speaker_analysis_error"] = Message(
+                        "err.speakerAnalysis.stopped"
+                    ).as_dict()
         except JobNotFound:
             return
 
@@ -193,17 +196,19 @@ class JobRunner:
         self._executor.shutdown(wait=False, cancel_futures=True)
 
 
-def describe_error(exc: Exception) -> str:
-    """Provider failures carry a message worth showing; nothing else does."""
+def describe_error(exc: Exception) -> dict:
+    """Provider failures carry a message worth showing; nothing else does.
 
-    from ..ai import AIProviderError
+    A coded failure already knows how it should read. An OSError or a ValueError
+    does not, so its own text is passed through verbatim — better than hiding a
+    real cause behind a generic sentence. Anything else is a bug, and says so.
+    """
 
-    if isinstance(exc, (AIProviderError, OSError, ValueError)):
-        return str(exc)
-    return (
-        f"Lỗi không mong đợi khi xử lý ({type(exc).__name__}). "
-        "Xem log server để biết chi tiết."
-    )
+    if isinstance(exc, CodedError):
+        return exc.message.as_dict()
+    if isinstance(exc, (OSError, ValueError)):
+        return raw(str(exc)).as_dict()
+    return Message("err.unexpected", {"type": type(exc).__name__}).as_dict()
 
 
 def finish(job: dict) -> None:

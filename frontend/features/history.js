@@ -10,6 +10,7 @@
 
 import { $ } from "../core/dom.js";
 import { setStatus } from "../core/feedback.js";
+import { t } from "../core/i18n.js";
 import { cueAt, cues, emit, isProcessing, onAny, renumberCues, state } from "../core/store.js";
 
 const LIMIT = 120;
@@ -114,7 +115,7 @@ export function undo() {
   future.push(inverseOf(entry));
   lastKey = null;
   restore(entry);
-  setStatus(`Đã hoàn tác: ${entry.title}`);
+  setStatus(t("status.undone", { title: entry.title }));
   refreshButtons();
 }
 
@@ -126,7 +127,7 @@ export function redo() {
   past.push(inverseOf(entry));
   lastKey = null;
   restore(entry);
-  setStatus(`Đã làm lại: ${entry.title}`);
+  setStatus(t("status.redone", { title: entry.title }));
   refreshButtons();
 }
 
@@ -139,8 +140,8 @@ function refreshButtons() {
   redoButton.disabled = blocked || !future.length;
   const back = past[past.length - 1];
   const forward = future[future.length - 1];
-  undoButton.title = back ? `Hoàn tác: ${back.title} (Ctrl Z)` : "Hoàn tác (Ctrl Z)";
-  redoButton.title = forward ? `Làm lại: ${forward.title} (Ctrl Y)` : "Làm lại (Ctrl Y)";
+  undoButton.title = back ? t("tool.undoOf", { title: back.title }) : t("tool.undo");
+  redoButton.title = forward ? t("tool.redoOf", { title: forward.title }) : t("tool.redo");
 }
 
 export function mountHistory() {

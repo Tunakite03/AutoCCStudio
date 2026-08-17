@@ -14,6 +14,7 @@ from pathlib import Path
 from ..ai import analyze_dialogue_turns, transcribe_video, translate_cues
 from ..cancellation import OperationCancelled
 from ..config import get_logger
+from ..messages import Message
 from .model import (
     PHASE_ANALYZING,
     PHASE_TRANSCRIBING,
@@ -27,7 +28,7 @@ logger = get_logger("jobs.tasks")
 
 
 def _phase_reporter(context: JobContext, phase: str):
-    def report(current: int, total: int | None, message: str) -> None:
+    def report(current: int, total: int | None, message: Message) -> None:
         context.progress(phase, current=current, total=total, message=message)
 
     return report
@@ -44,14 +45,12 @@ def _apply_speaker_analysis(job: dict, language: str | None, report: dict) -> No
         job["speaker_analysis_error"] = None
     elif failed < total:
         job["speaker_analysis_status"] = "partial"
-        job["speaker_analysis_error"] = (
-            f"AI giữ nguyên {failed}/{total} cue không đạt validation"
-        )
+        job["speaker_analysis_error"] = Message(
+            "err.speakerAnalysis.partial", {"failed": failed, "total": total}
+        ).as_dict()
     else:
         job["speaker_analysis_status"] = "failed"
-        job["speaker_analysis_error"] = (
-            "AI không trả về cue hợp lệ; đã giữ kết quả diarization âm thanh"
-        )
+        job["speaker_analysis_error"] = Message("err.speakerAnalysis.failed").as_dict()
 
 
 def transcription_task(
@@ -166,7 +165,7 @@ def translation_task(
                 PHASE_TRANSLATING,
                 current=done,
                 total=total,
-                message=f"Đã dịch {done}/{total} dòng",
+                message=Message("progress.translated", {"done": done, "total": total}),
             )
 
         cues = translate_cues(

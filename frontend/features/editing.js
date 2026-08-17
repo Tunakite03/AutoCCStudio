@@ -9,6 +9,7 @@ import { $ } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { MIN_CUE_DURATION, cueDuration } from "../core/format.js";
 import { toast } from "../core/feedback.js";
+import { t } from "../core/i18n.js";
 import { cueAt, cues, emit, isProcessing, onAny, renumberCues, state } from "../core/store.js";
 import { pushHistory } from "./history.js";
 import { currentTime } from "./transport.js";
@@ -45,15 +46,15 @@ export function updateCueText(index, field, value, historyKey, title) {
 }
 
 export function addCue() {
-  if (!state.job) return toast("Chưa có project", "error");
+  if (!state.job) return toast(t("toast.noProject"), "error");
   const list = cues();
   const at = currentTime();
   const blocked = list.some((cue) => at < cue.end && at + MIN_CUE_DURATION > cue.start);
   const start = blocked ? (list[list.length - 1]?.end ?? 0) + 0.05 : at;
   const next = list.find((cue) => cue.start > start);
   const end = Math.min(start + 2, next ? next.start - 0.02 : start + 2);
-  if (end - start < MIN_CUE_DURATION) return toast("Không đủ chỗ trống cho cue mới", "error");
-  pushHistory("add", "thêm cue");
+  if (end - start < MIN_CUE_DURATION) return toast(t("toast.noRoomForCue"), "error");
+  pushHistory("add", t("history.addCue"));
   list.push({ id: 0, start, end, text: "", translation: "", speaker: null });
   list.sort((a, b) => a.start - b.start);
   afterStructuralChange(list.findIndex((cue) => cue.start === start));
@@ -63,10 +64,10 @@ export function addCue() {
 export function splitCue() {
   const index = state.selected;
   const cue = cueAt(index);
-  if (!cue) return toast("Chọn một cue để cắt", "error");
+  if (!cue) return toast(t("toast.pickCueToSplit"), "error");
   const at = currentTime();
   if (at <= cue.start + MIN_CUE_DURATION || at >= cue.end - MIN_CUE_DURATION) {
-    return toast("Đặt playhead vào giữa cue rồi cắt", "error");
+    return toast(t("toast.playheadInsideCue"), "error");
   }
   // Split the text at the same proportion as the split point, on a word boundary.
   const ratio = (at - cue.start) / cueDuration(cue);
@@ -80,7 +81,7 @@ export function splitCue() {
   };
   const [textA, textB] = cut(cue.text);
   const [transA, transB] = cut(cue.translation);
-  pushHistory("split", `cắt cue ${index + 1}`);
+  pushHistory("split", t("history.splitCue", { cue: index + 1 }));
   const tail = {
     id: 0,
     start: at,
@@ -101,8 +102,8 @@ export function mergeCue() {
   const list = cues();
   const cue = list[index];
   const next = list[index + 1];
-  if (!cue || !next) return toast("Không có cue kế tiếp để gộp", "error");
-  pushHistory("merge", `gộp cue ${index + 1}`);
+  if (!cue || !next) return toast(t("toast.noNextCue"), "error");
+  pushHistory("merge", t("history.mergeCue", { cue: index + 1 }));
   cue.end = next.end;
   const speakerChanged = cue.speaker != null && next.speaker != null && cue.speaker !== next.speaker;
   const separator = speakerChanged ? "\n" : " ";
@@ -115,7 +116,7 @@ export function mergeCue() {
 export function deleteCue() {
   const index = state.selected;
   if (index < 0 || !cueAt(index)) return;
-  pushHistory("delete", `xóa cue ${index + 1}`);
+  pushHistory("delete", t("history.deleteCue", { cue: index + 1 }));
   cues().splice(index, 1);
   afterStructuralChange(Math.min(index, cues().length - 1));
 }
@@ -123,35 +124,35 @@ export function deleteCue() {
 export function markPoint(edge) {
   const index = state.selected;
   const cue = cueAt(index);
-  if (!cue) return toast("Chọn một cue trước", "error");
+  if (!cue) return toast(t("toast.pickCueFirst"), "error");
   const at = currentTime();
   if (edge === "start" && at >= cue.end - MIN_CUE_DURATION) {
-    return toast("Điểm vào phải trước điểm ra", "error");
+    return toast(t("toast.inBeforeOut"), "error");
   }
   if (edge === "end" && at <= cue.start + MIN_CUE_DURATION) {
-    return toast("Điểm ra phải sau điểm vào", "error");
+    return toast(t("toast.outAfterIn"), "error");
   }
   updateCueTimes(
     index,
     { start: edge === "start" ? at : cue.start, end: edge === "end" ? at : cue.end },
     `mark:${index}:${edge}`,
-    `lấy điểm ${edge === "start" ? "vào" : "ra"} cue ${index + 1}`,
+    t(edge === "start" ? "history.markIn" : "history.markOut", { cue: index + 1 }),
   );
 }
 
 export async function splitAllLongCues() {
-  if (!state.job) return toast("Chưa có project", "error");
+  if (!state.job) return toast(t("toast.noProject"), "error");
   const list = cues();
-  if (!list.length) return toast("Chưa có cue nào để tách", "error");
+  if (!list.length) return toast(t("toast.noCuesToSplit"), "error");
 
   try {
-    pushHistory("split-long", "tách các cue dài");
+    pushHistory("split-long", t("history.splitLong"));
     const updated = await api.splitLongCues(state.job.id);
     state.job.cues = updated.cues;
     afterStructuralChange(Math.min(state.selected, cues().length - 1));
-    toast(`Đã chuẩn hóa thành ${cues().length} cue ngắn gọn`, "success");
+    toast(t("toast.normalizedCues", { count: cues().length }), "success");
   } catch (error) {
-    toast(`Lỗi khi tách cue: ${error.message}`, "error");
+    toast(t("toast.splitFailed", { message: error.message }), "error");
   }
 }
 

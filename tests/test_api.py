@@ -15,6 +15,7 @@ from backend.config import RUNTIME_DIR
 from backend.jobs import runner, store
 from backend.jobs.model import new_job
 from backend.jobs.tasks import speaker_analysis_task, transcription_task, translation_task
+from backend.messages import Message
 
 client = TestClient(app)
 
@@ -122,7 +123,7 @@ def test_transcription_route_passes_selected_deepgram_model(monkeypatch):
     def fake_transcribe(_path, model_size=None, language=None, provider=None, on_progress=None):
         captured.update(model=model_size, language=language, provider=provider)
         if on_progress:
-            on_progress(3, 10, "Đang nhận dạng lời thoại")
+            on_progress(3, 10, Message("progress.transcribing"))
         return [
             {
                 "id": 1,
@@ -300,7 +301,7 @@ def test_retranscribe_rejects_jobs_without_a_stored_video():
     try:
         response = client.post(f"/api/jobs/{job['id']}/transcribe", data={"provider": "deepgram"})
         assert response.status_code == 400
-        assert "không còn video" in response.json()["detail"]
+        assert response.json()["detail"]["code"] == "err.job.videoGone"
     finally:
         cleanup(job["id"])
 
@@ -431,7 +432,9 @@ def test_sse_stream_publishes_progress_without_a_status_change():
 
     def report_then_finish():
         context = runner_context(job_id)
-        context.progress("transcribing", current=30, total=100, message="Đang nhận dạng")
+        context.progress(
+            "transcribing", current=30, total=100, message=Message("progress.transcribing")
+        )
         time.sleep(0.05)
         with store.edit(job_id) as opened:
             opened["status"] = "completed"
@@ -605,7 +608,7 @@ def test_unexpected_worker_error_fails_the_job_instead_of_hanging_it(monkeypatch
         )
         result = client.get(f"/api/jobs/{job['id']}").json()
         assert result["status"] == "error"
-        assert "KeyError" in result["error"]
+        assert result["error"] == {"code": "err.unexpected", "params": {"type": "KeyError"}}
         assert result["progress"] is None
     finally:
         cleanup(job["id"])
@@ -637,7 +640,7 @@ def test_unexpected_speaker_analysis_error_keeps_the_transcription(monkeypatch):
         result = client.get(f"/api/jobs/{job['id']}").json()
         assert result["status"] == "completed"
         assert result["speaker_analysis_status"] == "failed"
-        assert "TypeError" in result["speaker_analysis_error"]
+        assert result["speaker_analysis_error"]["params"]["type"] == "TypeError"
         assert [cue["text"] for cue in result["cues"]] == ["kept"]
     finally:
         cleanup(job["id"])
@@ -656,7 +659,7 @@ def test_a_failed_batch_keeps_the_translations_that_already_succeeded(monkeypatc
     def flaky_batch(lines, target_language, **context):
         calls["n"] += 1
         if calls["n"] > 2:
-            raise ai_module.AIProviderError("model đứt kết nối")
+            raise ai_module.AIProviderError("err.test.providerDied")
         return real_batch(lines, target_language, **context)
 
     monkeypatch.setattr(ai_module, "_translate_batch", flaky_batch)
@@ -674,7 +677,7 @@ def test_a_failed_batch_keeps_the_translations_that_already_succeeded(monkeypatc
         runner.run_blocking(job["id"], "translation", translation_task("Tiếng Việt"))
         result = client.get(f"/api/jobs/{job['id']}").json()
         assert result["status"] == "error"
-        assert "đứt kết nối" in result["error"]
+        assert result["error"]["code"] == "err.test.providerDied"
         translated = [cue["translation"] for cue in result["cues"] if cue["translation"]]
         assert len(translated) == 40, len(translated)
         assert translated[0] == "[Tiếng Việt] line 1"
@@ -917,7 +920,7 @@ def test_translate_route_rejects_a_start_cue_past_the_last_one():
             json={"target_language": "Tiếng Việt", "from_cue": 3},
         )
         assert response.status_code == 400
-        assert "vị trí đó" in response.json()["detail"]
+        assert response.json()["detail"]["code"] == "err.translation.noCuesFromHere"
     finally:
         cleanup(job["id"])
 
@@ -938,7 +941,7 @@ def test_processing_job_loaded_only_from_disk_is_marked_interrupted():
         restored = response.json()
         assert restored["status"] == "error"
         assert restored["speaker_analysis_status"] == "not_run"
-        assert "khởi động lại" in restored["error"]
+        assert restored["error"]["code"] == "err.job.interrupted"
     finally:
         cleanup(job_id)
 
@@ -1244,5 +1247,5 @@ def test_a_model_configured_in_env_is_always_offered(monkeypatch):
     options = body["translation_models"]["openai_compatible"]
 
     assert options[0]["value"] == "ministral-8b-latest"
-    assert "từ .env" in options[0]["label"]
+    assert options[0]["hint"]["code"] == "model.fromEnv"
     assert body["llm_endpoint"] == "api.mistral.ai"

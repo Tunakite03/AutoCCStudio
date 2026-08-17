@@ -10,6 +10,7 @@ import {
   parseTimecode,
 } from "../core/format.js";
 import { toast } from "../core/feedback.js";
+import { t } from "../core/i18n.js";
 import { cueAt, cues, on, selectedCue, state } from "../core/store.js";
 import { stepCue } from "./cuelist.js";
 import { updateCueText, updateCueTimes } from "./editing.js";
@@ -45,7 +46,10 @@ export function renderInspector() {
     return;
   }
 
-  field.index.textContent = `Cue ${String(state.selected + 1).padStart(2, "0")} / ${cues().length}`;
+  field.index.textContent = t("inspector.index", {
+    index: String(state.selected + 1).padStart(2, "0"),
+    total: cues().length,
+  });
   // Never overwrite the box the user is typing in.
   if (document.activeElement !== field.start) field.start.value = formatTimecode(cue.start);
   if (document.activeElement !== field.end) field.end.value = formatTimecode(cue.end);
@@ -81,19 +85,19 @@ function bindTimeField(input, edge) {
     const parsed = parseTimecode(input.value);
     if (parsed === null) {
       renderInspector();
-      return toast("Không đọc được timecode. Dùng dạng 00:01:02.500", "error");
+      return toast(t("toast.badTimecode"), "error");
     }
     const start = edge === "start" ? parsed : cue.start;
     const end = edge === "end" ? parsed : cue.end;
     if (end - start < MIN_CUE_DURATION) {
       renderInspector();
-      return toast("Cue phải dài hơn 0.12 giây", "error");
+      return toast(t("toast.cueTooShort", { seconds: MIN_CUE_DURATION }), "error");
     }
     updateCueTimes(
       state.selected,
       { start, end },
       `time:${state.selected}:${edge}`,
-      `sửa thời gian cue ${state.selected + 1}`,
+      t("history.editTime", { cue: state.selected + 1 }),
     );
     renderInspector();
   });
@@ -107,7 +111,9 @@ function bindTextField(input, name) {
       name,
       input.value,
       `${name}:${state.selected}`,
-      `sửa ${name === "text" ? "lời gốc" : "bản dịch"} cue ${state.selected + 1}`,
+      t(name === "text" ? "history.editSource" : "history.editTranslation", {
+        cue: state.selected + 1,
+      }),
     );
   });
 }

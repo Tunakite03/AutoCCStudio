@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from ..jobs import store
 from ..media import FFmpegError, NoAudioTrack, extract_waveform, mux_soft_subtitles, render_thumbnail
+from ..messages import detail
 from ..subtitles import format_subtitle
 
 router = APIRouter(prefix="/api/jobs", tags=["media"])
@@ -23,20 +24,20 @@ def _ffmpeg_http_error(exc: FFmpegError) -> HTTPException:
     """ffmpeg failures map onto three different client-visible situations."""
 
     if exc.missing:
-        return HTTPException(status_code=503, detail=str(exc))
+        return HTTPException(status_code=503, detail=exc.message.as_dict())
     if exc.timed_out:
-        return HTTPException(status_code=504, detail=str(exc))
-    return HTTPException(status_code=500, detail=str(exc))
+        return HTTPException(status_code=504, detail=exc.message.as_dict())
+    return HTTPException(status_code=500, detail=exc.message.as_dict())
 
 
 def _job_video_path(job_id: str) -> Path:
     job = store.read(job_id)
     raw_path = job.get("video_path")
     if not raw_path:
-        raise HTTPException(status_code=404, detail="Job này không có video")
+        raise HTTPException(status_code=404, detail=detail("err.job.noVideo"))
     path = Path(raw_path)
     if not path.exists():
-        raise HTTPException(status_code=404, detail="File video không còn trong workspace")
+        raise HTTPException(status_code=404, detail=detail("err.job.videoFileGone"))
     return path
 
 
@@ -67,7 +68,7 @@ def job_waveform(job_id: str) -> dict:
     try:
         waveform = extract_waveform(path)
     except NoAudioTrack as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=exc.message.as_dict()) from exc
     except FFmpegError as exc:
         raise _ffmpeg_http_error(exc) from exc
 
@@ -162,7 +163,7 @@ def mux_subtitle(job_id: str) -> FileResponse:
 
     job = store.read(job_id)
     if not job.get("video_path"):
-        raise HTTPException(status_code=400, detail="Job import subtitle không có video")
+        raise HTTPException(status_code=400, detail=detail("err.job.subtitleOnly"))
 
     job_dir = store.job_dir(job_id)
     subtitle_path = job_dir / "current.srt"

@@ -7,6 +7,7 @@
  */
 
 import { $ } from "../core/dom.js";
+import { t } from "../core/i18n.js";
 import { on, state } from "../core/store.js";
 import { MAX_PPS, MIN_PPS, createTimeline } from "../lib/timeline-engine.js";
 import { selectCue } from "./cuelist.js";
@@ -64,11 +65,11 @@ export function mountTimelineView() {
         index,
         times,
         nextGestureKey(),
-        `${mode === "move" ? "dời" : "co giãn"} cue ${index + 1}`,
+        t(mode === "move" ? "history.moveCue" : "history.resizeCue", { cue: index + 1 }),
       ),
     onDragTime: previewTimes,
     onZoom: (pps) => {
-      $("#status-zoom").textContent = `${Math.round(pps)} px/s`;
+      $("#status-zoom").textContent = t("status.zoom", { pps: Math.round(pps) });
       $("#zoom-range").value = zoomToSlider(pps);
     },
     onScrubStart: holdPlayback,
@@ -129,6 +130,6 @@ export function mountTimelineView() {
   });
 
   engine.render();
-  $("#status-zoom").textContent = `${Math.round(engine.pps)} px/s`;
+  $("#status-zoom").textContent = t("status.zoom", { pps: Math.round(engine.pps) });
   $("#zoom-range").value = zoomToSlider(engine.pps);
 }

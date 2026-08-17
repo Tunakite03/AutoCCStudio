@@ -14,23 +14,39 @@ from ..ai import (
 )
 from ..config import settings
 from ..media import find_ffmpeg
+from ..messages import Message
 from ..translation_style import style_options
 
 router = APIRouter(prefix="/api", tags=["system"])
 
+
+def _option(value: str, hint: str | None = None, *, name: str | None = None) -> dict:
+    """One picker entry: a value, the name it is known by, and a hint code.
+
+    The name is a proper noun — a model is called Nova-3 in every language — so
+    it is data. The hint is the part that reads as a sentence, so it travels as a
+    code the client resolves.
+    """
+
+    option = {"value": value, "name": name or value}
+    if hint:
+        option["hint"] = Message(hint).as_dict()
+    return option
+
+
 TRANSCRIPTION_MODELS = {
     "faster_whisper": [
-        {"value": "tiny", "label": "tiny — nhanh, nhẹ"},
-        {"value": "base", "label": "base — cân bằng"},
-        {"value": "small", "label": "small — khuyến nghị CPU"},
-        {"value": "medium", "label": "medium — chính xác hơn"},
-        {"value": "large-v3", "label": "large-v3 — tốt nhất, nặng"},
+        _option("tiny", "model.whisper.tiny"),
+        _option("base", "model.whisper.base"),
+        _option("small", "model.whisper.small"),
+        _option("medium", "model.whisper.medium"),
+        _option("large-v3", "model.whisper.largeV3"),
     ],
     "deepgram": [
-        {"value": "nova-3", "label": "Nova-3 — khuyến nghị, nhiều người"},
-        {"value": "nova-2", "label": "Nova-2 — tương thích rộng"},
-        {"value": "nova-2-meeting", "label": "Nova-2 Meeting — họp, English"},
-        {"value": "nova-2-video", "label": "Nova-2 Video — video, English"},
+        _option("nova-3", "model.deepgram.nova3", name="Nova-3"),
+        _option("nova-2", "model.deepgram.nova2", name="Nova-2"),
+        _option("nova-2-meeting", "model.deepgram.nova2Meeting", name="Nova-2 Meeting"),
+        _option("nova-2-video", "model.deepgram.nova2Video", name="Nova-2 Video"),
     ],
 }
 
@@ -42,33 +58,33 @@ TRANSCRIPTION_MODELS = {
 # actually run.
 LLM_MODELS_BY_HOST = {
     "mistral.ai": [
-        {"value": "mistral-large-latest", "label": "Mistral Large — chất lượng cao"},
-        {"value": "mistral-medium-latest", "label": "Mistral Medium — cân bằng"},
-        {"value": "mistral-small-latest", "label": "Mistral Small — nhanh, tự nhiên"},
-        {"value": "open-mistral-nemo", "label": "Mistral Nemo 12B — nhẹ, rẻ"},
+        _option("mistral-large-latest", "model.llm.topQuality", name="Mistral Large"),
+        _option("mistral-medium-latest", "model.llm.balanced", name="Mistral Medium"),
+        _option("mistral-small-latest", "model.llm.fastNatural", name="Mistral Small"),
+        _option("open-mistral-nemo", "model.llm.lightCheap", name="Mistral Nemo 12B"),
     ],
     "openai.com": [
-        {"value": "gpt-4o", "label": "GPT-4o — thông minh, văn phong mượt"},
-        {"value": "gpt-4o-mini", "label": "GPT-4o Mini — nhanh, chuẩn xác"},
+        _option("gpt-4o", "model.llm.smartProse", name="GPT-4o"),
+        _option("gpt-4o-mini", "model.llm.fastAccurate", name="GPT-4o Mini"),
     ],
     "deepseek.com": [
-        {"value": "deepseek-chat", "label": "DeepSeek V3 — chi tiết, tự nhiên"},
+        _option("deepseek-chat", "model.llm.detailedNatural", name="DeepSeek V3"),
     ],
 }
 
 # Ollama and LM Studio serve whatever has been pulled locally, so this is a
 # starting point rather than a catalogue.
 LOCAL_LLM_MODELS = [
-    {"value": "qwen2.5:7b", "label": "Qwen 2.5 7B — khuyên dùng Ollama"},
-    {"value": "qwen2.5:14b", "label": "Qwen 2.5 14B — dịch sắc thái tốt"},
-    {"value": "qwen2.5:32b", "label": "Qwen 2.5 32B — dịch xuất sắc"},
-    {"value": "llama3.1:8b", "label": "Llama 3.1 8B — phổ biến"},
+    _option("qwen2.5:7b", "model.llm.ollamaPick", name="Qwen 2.5 7B"),
+    _option("qwen2.5:14b", "model.llm.goodNuance", name="Qwen 2.5 14B"),
+    _option("qwen2.5:32b", "model.llm.excellent", name="Qwen 2.5 32B"),
+    _option("llama3.1:8b", "model.llm.popular", name="Llama 3.1 8B"),
 ]
 
 TRANSFORMERS_MODELS = [
-    {"value": "Helsinki-NLP/opus-mt-en-vi", "label": "Opus-MT En-Vi (Helsinki-NLP)"},
-    {"value": "facebook/nllb-200-distilled-600M", "label": "NLLB-200 Distilled 600M (Meta)"},
-    {"value": "vinai/vinai-translate-en2vi", "label": "VinAI Translate En-Vi"},
+    _option("Helsinki-NLP/opus-mt-en-vi", name="Opus-MT En-Vi (Helsinki-NLP)"),
+    _option("facebook/nllb-200-distilled-600M", name="NLLB-200 Distilled 600M (Meta)"),
+    _option("vinai/vinai-translate-en2vi", name="VinAI Translate En-Vi"),
 ]
 
 
@@ -88,7 +104,7 @@ def _translation_models() -> dict[str, list[dict]]:
     options = _llm_endpoint_models(settings.llm_base_url)
     configured = settings.llm_model.strip()
     if configured and not any(item["value"] == configured for item in options):
-        options.insert(0, {"value": configured, "label": f"{configured} — từ .env"})
+        options.insert(0, _option(configured, "model.fromEnv"))
     return {
         "openai_compatible": options,
         "transformers": list(TRANSFORMERS_MODELS),

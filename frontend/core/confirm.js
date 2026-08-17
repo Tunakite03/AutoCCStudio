@@ -1,7 +1,10 @@
 /**
  * One modal for every destructive action, awaited like `window.confirm`.
  *
- *   if (!(await confirmAction({ title: "Xóa project?", ... }))) return;
+ *   if (!(await confirmAction({ title: t("confirm.deleteTitle"), ... }))) return;
+ *
+ * Callers pass text, not keys: most of these sentences name the thing being
+ * acted on, so they are composed with `t()` at the call site.
  *
  * The answer comes from the buttons and the Escape key, never from the dialog's
  * `close` event: that event is not dispatched in every embedded Chrome build,
@@ -9,13 +12,14 @@
  */
 
 import { $ } from "./dom.js";
+import { t } from "./i18n.js";
 
 export function confirmAction({
   title,
   target = "",
   note = "",
-  confirmLabel = "Đồng ý",
-  cancelLabel = "Hủy",
+  confirmLabel = t("action.agree"),
+  cancelLabel = t("action.cancel"),
   variant = "danger",
 }) {
   const dialog = $("#confirm-dialog");

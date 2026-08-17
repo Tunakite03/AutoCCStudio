@@ -623,7 +623,8 @@ def test_translation_reports_which_lines_the_model_never_returned(monkeypatch):
     try:
         ai.translate_cues(cues, "Tiếng Việt", batch_size=2)
     except ai.AIProviderError as error:
-        assert "dòng 2" in str(error), str(error)
+        assert error.code == "err.ai.translationIncomplete", str(error)
+        assert error.params["lines"] == "2", str(error)
     else:
         raise AssertionError("expected the unrepairable line to fail the batch")
 
@@ -847,8 +848,8 @@ def test_the_llm_rotates_its_keys_and_remembers_which_one_is_cooling(monkeypatch
     message = [{"role": "user", "content": "dịch đi"}]
 
     try:
-        assert ai._llm_completion(message, temperature=0.0, operation="thử") == "xong"
-        assert ai._llm_completion(message, temperature=0.0, operation="thử") == "xong"
+        assert ai._llm_completion(message, temperature=0.0, operation=ai.OP_TRANSLATE) == "xong"
+        assert ai._llm_completion(message, temperature=0.0, operation=ai.OP_TRANSLATE) == "xong"
         assert ai._llm_credentials() is ai._llm_credentials(), "one shared pool"
     finally:
         shutdown()
@@ -882,13 +883,16 @@ def test_a_job_stops_with_a_readable_error_when_every_key_is_limited(monkeypatch
             ai._llm_completion(
                 [{"role": "user", "content": "dịch đi"}],
                 temperature=0.0,
-                operation="dịch",
+                operation=ai.OP_TRANSLATE,
             )
     finally:
         shutdown()
 
-    assert "Cả 2 API key" in str(error.value)
-    assert "khi dịch" in str(error.value)
+    # The run reports what it was doing, and keeps the HTTP layer's own reason.
+    assert error.value.code == "err.ai.llmRequestFailed"
+    assert error.value.params["operation"] is ai.OP_TRANSLATE
+    assert error.value.params["cause"].code == "err.http.poolExhausted"
+    assert error.value.params["cause"].params["keys"] == 2
     assert sorted(seen) == ["key-1", "key-2"], "each key was given its turn"
 
 

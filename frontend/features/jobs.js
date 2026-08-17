@@ -8,6 +8,7 @@
 import { $ } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { reportError, setSaveState, setStatus, toast } from "../core/feedback.js";
+import { t, tm } from "../core/i18n.js";
 import { cues, on, setJob, setSelection, state } from "../core/store.js";
 import { resetHistory } from "./history.js";
 import { setWaveformNote, timeline } from "./timeline-view.js";
@@ -34,14 +35,17 @@ export function adoptJob(job, { keepSelection = false } = {}) {
   if (!isNewJob) return;
   resetHistory();
   timeline.setWaveform(null);
-  setWaveformNote(job.video_available ? "Đang đọc dạng sóng…" : "Project không có audio");
+  setWaveformNote(t(job.video_available ? "wave.loading" : "wave.noAudio"));
   loadJobVideo(job, api.videoUrl(job.id));
   if (job.video_available) loadWaveform(job.id);
 }
 
 function renderProjectChip(job) {
-  $("#project-name").textContent = job.video_name || job.subtitle_name || "Project không tên";
-  $("#project-kind").textContent = job.kind === "transcription" ? "VIDEO" : "PHỤ ĐỀ";
+  $("#project-name").textContent =
+    job.video_name || job.subtitle_name || t("project.untitled");
+  $("#project-kind").textContent = t(
+    job.kind === "transcription" ? "project.kindVideo" : "project.kindSubtitle",
+  );
   $("#status-language").textContent = job.detected_language || job.source_language || "—";
 }
 
@@ -54,16 +58,20 @@ function renderProgress(job) {
   // a provider call already in flight has to return first. Saying so is the
   // difference between "the button did nothing" and "it is finishing a step".
   const stopping = Boolean(job.cancel_requested);
+  // The worker's own progress line wins when it has one: it names the step and
+  // counts it. The per-phase fallbacks below only cover the gap before the first
+  // tick arrives.
   $("#progress-copy").textContent = stopping
-    ? "Đang dừng… chờ bước đang chạy kết thúc"
-    : job.kind === "transcription" && !cues().length
-      ? "AI đang nghe audio và dựng timestamp…"
-      : job.speaker_analysis_status === "processing"
-        ? "AI đang phân tích ngữ cảnh và tách lượt thoại…"
-        : "AI đang dịch từng cue…";
+    ? t("run.stopping")
+    : tm(job.progress?.message) ||
+      (job.kind === "transcription" && !cues().length
+        ? t("run.listening")
+        : job.speaker_analysis_status === "processing"
+          ? t("run.analyzing")
+          : t("run.translating"));
   $("#cancel-job-btn").disabled = stopping;
-  $("#cancel-job-label").textContent = stopping ? "Đang dừng…" : "Hủy";
-  setStatus(stopping ? "Đang dừng" : "Đang xử lý", "busy");
+  $("#cancel-job-label").textContent = t(stopping ? "action.cancelling" : "action.cancel");
+  setStatus(t(stopping ? "status.stopping" : "status.processing"), "busy");
 }
 
 async function cancelRun() {
@@ -72,7 +80,7 @@ async function cancelRun() {
   $("#cancel-job-btn").disabled = true;
   try {
     adoptJob(await api.cancel(job.id), { keepSelection: true });
-    toast("Đã yêu cầu dừng — chờ bước đang chạy kết thúc", "success");
+    toast(t("toast.stopRequested"), "success");
   } catch (error) {
     $("#cancel-job-btn").disabled = false;
     reportError(error);
@@ -87,7 +95,7 @@ async function loadWaveform(jobId) {
   } catch (error) {
     if (state.job?.id !== jobId) return;
     setWaveformNote(
-      error.message.includes("ffmpeg") ? "Cần ffmpeg để hiện dạng sóng" : "Không đọc được dạng sóng",
+      t(error.message.includes("ffmpeg") ? "wave.needFfmpeg" : "wave.unreadable"),
     );
   }
 }
@@ -102,20 +110,20 @@ export function forgetJob() {
   resetHistory();
   clearVideo();
   timeline.setWaveform(null);
-  setWaveformNote("Chưa mở project");
-  $("#project-name").textContent = "Chưa mở project";
-  $("#project-kind").textContent = "TRỐNG";
+  setWaveformNote(t("project.none"));
+  $("#project-name").textContent = t("project.none");
+  $("#project-kind").textContent = t("project.kindEmpty");
   $("#status-language").textContent = "—";
   $("#progress-rail").classList.add("hidden");
-  setSaveState("—");
-  setStatus("Sẵn sàng");
+  setSaveState(t("save.none"));
+  setStatus(t("status.ready"));
 }
 
 export const hasLastJob = () => Boolean(localStorage.getItem(JOB_KEY));
 
 /** Called when a video is picked before any job exists. */
 export function noteLocalPreview() {
-  if (!state.job?.video_available) setWaveformNote("Dạng sóng hiện sau khi tạo phụ đề");
+  if (!state.job?.video_available) setWaveformNote(t("wave.afterTranscribe"));
 }
 
 export const bindPreviewToJob = claimPreviewFor;
@@ -147,12 +155,12 @@ export function watchJob(jobId) {
     else if (job.status === "cancelled") onJobCancelled(job);
     else if (job.status === "error") {
       stopEvents();
-      reportError(new Error(job.error || "Job thất bại"));
+      reportError(new Error(tm(job.error, "job.failed")));
     }
   });
 
   source.onerror = () => {
-    if (eventSource === source) setStatus("Mất kết nối SSE, đang thử lại…", "busy");
+    if (eventSource === source) setStatus(t("status.sseRetry"), "busy");
   };
 }
 
@@ -161,36 +169,41 @@ export function watchJob(jobId) {
 function onJobCancelled(job) {
   stopEvents();
   resetHistory();
-  setSaveState("Đã lưu", "saved");
+  setSaveState(t("save.saved"), "saved");
   const translated = job.cues.filter((cue) => (cue.translation || "").trim()).length;
-  const kept = translated ? `${translated}/${job.cues.length} cue đã dịch được giữ lại` : `${job.cues.length} cue`;
-  setStatus(`Đã dừng · ${kept}`);
-  toast(`Đã dừng tiến trình · ${kept}`, "success");
+  const kept = translated
+    ? t("job.keptTranslated", { done: translated, total: job.cues.length })
+    : t("job.keptCues", { count: job.cues.length });
+  setStatus(t("status.stoppedWith", { kept }));
+  toast(t("toast.stoppedWith", { kept }), "success");
   if (isVideoReady()) timeline.fit();
 }
 
 function onJobCompleted(job) {
   stopEvents();
   resetHistory(); // the AI rewrote every cue — older snapshots no longer belong to this take
-  setSaveState("Đã lưu", "saved");
+  setSaveState(t("save.saved"), "saved");
   if (job.speaker_analysis_status === "failed") {
-    const warning = job.speaker_analysis_error || "AI không phân tích được lượt thoại";
-    setStatus(`Đã tạo phụ đề · ${warning}`, "error");
-    toast(`Đã tạo phụ đề, nhưng ${warning}`, "error");
+    const warning = tm(job.speaker_analysis_error, "job.analysisFailed");
+    setStatus(t("status.subtitlesWithWarning", { warning }), "error");
+    toast(t("toast.subtitlesWithWarning", { warning }), "error");
   } else if (job.speaker_analysis_status === "partial") {
-    const warning = job.speaker_analysis_error || "một số cue được giữ nguyên";
-    setStatus(`Hoàn tất một phần · ${warning}`, "error");
-    toast(`Đã tách phần hợp lệ; ${warning}`, "error");
+    const warning = tm(job.speaker_analysis_error, "job.someCuesKept");
+    setStatus(t("status.partialWithWarning", { warning }), "error");
+    toast(t("toast.partialWithWarning", { warning }), "error");
   } else {
-    setStatus("Hoàn tất");
+    setStatus(t("status.done"));
     const report = job.speaker_analysis_report;
-    const analyzed =
+    const extra =
       job.speaker_analysis_status === "completed" && report
-        ? ` · audio ${report.acoustic_split_cues} · AI ${report.ai_modified_cues}`
+        ? t("job.analysisCounts", {
+            acoustic: report.acoustic_split_cues,
+            ai: report.ai_modified_cues,
+          })
         : job.speaker_analysis_status === "completed"
-          ? " · đã tách lượt thoại"
+          ? t("job.turnsSplit")
           : "";
-    toast(`Xong · ${job.cues.length} cue${analyzed}`, "success");
+    toast(t("toast.doneCues", { count: job.cues.length, extra }), "success");
   }
   if (isVideoReady()) timeline.fit();
 }
@@ -199,7 +212,7 @@ function onJobCompleted(job) {
 
 function queueSave() {
   if (!state.job) return;
-  setSaveState("Đang lưu…", "saving");
+  setSaveState(t("save.saving"), "saving");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     const payload = cues().map((cue) => ({
@@ -214,10 +227,10 @@ function queueSave() {
       const saved = await api.saveCues(state.job.id, payload);
       // Keep local cues: the user may have typed while the request was in flight.
       Object.assign(state.job, { ...saved, cues: state.job.cues });
-      setSaveState("Đã lưu", "saved");
-      setStatus("Đã lưu thay đổi");
+      setSaveState(t("save.saved"), "saved");
+      setStatus(t("status.savedChanges"));
     } catch (error) {
-      setSaveState("Lưu lỗi", "error");
+      setSaveState(t("save.failed"), "error");
       reportError(error);
     }
   }, SAVE_DEBOUNCE_MS);
@@ -231,7 +244,7 @@ export async function restoreLastJob() {
   try {
     const job = await api.job(jobId);
     adoptJob(job);
-    setStatus("Đã mở lại project gần nhất");
+    setStatus(t("status.reopened"));
     if (job.status === "processing") watchJob(job.id);
   } catch {
     localStorage.removeItem(JOB_KEY);

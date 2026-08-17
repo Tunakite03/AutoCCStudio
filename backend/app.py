@@ -16,6 +16,7 @@ from .api import media as media_api
 from .api import system as system_api
 from .config import FRONTEND_DIR, get_logger, settings
 from .jobs import JobConflict, JobNotFound, runner
+from .messages import detail
 
 logger = get_logger("app")
 
@@ -81,12 +82,12 @@ app.add_middleware(
 # so the store and the workers never import HTTPException.
 @app.exception_handler(JobNotFound)
 async def _job_not_found(_request: Request, _exc: JobNotFound) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": "Không tìm thấy job"})
+    return JSONResponse(status_code=404, content={"detail": detail("err.job.notFound")})
 
 
 @app.exception_handler(JobConflict)
 async def _job_conflict(_request: Request, exc: JobConflict) -> JSONResponse:
-    return JSONResponse(status_code=409, content={"detail": str(exc) or "Job đang xử lý"})
+    return JSONResponse(status_code=409, content={"detail": exc.message.as_dict()})
 
 
 app.include_router(system_api.router)

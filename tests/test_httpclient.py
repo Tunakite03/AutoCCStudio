@@ -153,7 +153,7 @@ def test_a_rate_limit_that_never_clears_says_so(monkeypatch):
                 retries=2,
             )
         assert error.value.status_code == 429
-        assert "giới hạn tốc độ" in str(error.value)
+        assert error.value.code == "err.http.rateLimited"
     finally:
         shutdown()
     assert len(seen) == 3  # the rate-limit budget, not the connection one
@@ -288,7 +288,8 @@ def test_when_every_key_is_limited_the_call_stops_and_names_the_reason(monkeypat
                 credentials=CredentialPool(["key-a", "key-b", "key-c"]),
             )
         assert error.value.status_code == 429
-        assert "Cả 3 API key" in str(error.value)
+        assert error.value.code == "err.http.poolExhausted"
+        assert error.value.params["keys"] == 3
     finally:
         shutdown()
     # Every key was given its turn before giving up, and none was tried twice.
@@ -369,7 +370,8 @@ def test_a_pool_of_nothing_but_bad_keys_says_which_setting_is_wrong():
                 credentials=CredentialPool(["bad-a", "bad-b"]),
             )
         assert error.value.status_code == 401
-        assert "LLM_API_KEY" in str(error.value)
+        assert error.value.code == "err.http.keysRejected"
+        assert error.value.params["keys"] == 2
     finally:
         shutdown()
     assert seen == ["bad-a", "bad-b"]

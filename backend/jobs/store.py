@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Iterator
 
 from ..config import get_logger
+from ..messages import CodedError, Message
 from .model import is_valid_job_id, public_job
 
 logger = get_logger("jobs.store")
@@ -32,8 +33,11 @@ class JobNotFound(LookupError):
     """No job with this id, or the id could never name one."""
 
 
-class JobConflict(RuntimeError):
+class JobConflict(CodedError):
     """The job is busy and the requested transition is not allowed."""
+
+    def __init__(self, code: str | Message = "err.job.busy", **params):
+        super().__init__(code, **params)
 
 
 class JobStore:
@@ -98,7 +102,7 @@ class JobStore:
             # In-memory jobs return above. A processing job found only on disk
             # belongs to a previous server process and has no worker left.
             job["status"] = "error"
-            job["error"] = "Job bị gián đoạn khi app khởi động lại; hãy chạy lại thao tác"
+            job["error"] = Message("err.job.interrupted").as_dict()
             job["progress"] = None
             if job.get("speaker_analysis_status") in {"pending", "processing"}:
                 job["speaker_analysis_status"] = "not_run"
