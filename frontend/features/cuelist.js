@@ -1,9 +1,10 @@
 /**
  * The cue list panel, and the app's notion of "which cue is current".
  *
- * Rows are built once per structural change and patched in place afterwards —
- * a full rebuild on every keystroke would throw away scroll position and cost
- * more than it saves on a list of several hundred rows.
+ * Rows are pooled, not rebuilt: a structural change only adds or removes the
+ * difference and repaints through cached child references. One delegated click
+ * listener serves the whole list, so a thousand cues cost one listener rather
+ * than a thousand closures.
  */
 
 import { $, element } from "../core/dom.js";
@@ -23,10 +24,12 @@ const ROW =
   "text-left cursor-pointer transition-[background-color,border-color] duration-[110ms] hover:bg-raised";
 const ROW_TEXT = "overflow-hidden text-[12px] leading-[1.4] text-ellipsis line-clamp-2 whitespace-pre-line";
 
-function buildRow(cue, index) {
-  const row = element("button", ROW);
-  row.type = "button";
-  row.dataset.index = String(index);
+/** A row's position never changes once built, so the index label is painted here
+ *  and only the cue-dependent parts are touched on repaint. */
+function buildRow(index) {
+  const el = element("button", ROW);
+  el.type = "button";
+  el.dataset.index = String(index);
 
   const number = element(
     "span",
@@ -35,55 +38,54 @@ function buildRow(cue, index) {
   );
   const main = element("span", "cue-row-main min-w-0 grid gap-[3px]");
   const time = element("span", "cue-row-time mono flex items-center gap-[7px] text-muted text-[10px]");
-  time.append(
-    element("span"),
-    element("span", "dur text-faint"),
-    element("span", "cps-tag ml-auto px-1 rounded-[3px] text-[9.5px] font-semibold"),
-  );
-  main.append(
-    time,
-    element("span", `cue-row-text ${ROW_TEXT} text-text-dim`),
-    element("span", `cue-row-translation ${ROW_TEXT} text-accent`),
-  );
-  row.append(number, main);
+  const range = element("span");
+  const dur = element("span", "dur text-faint");
+  const tag = element("span", "cps-tag ml-auto px-1 rounded-[3px] text-[9.5px] font-semibold");
+  time.append(range, dur, tag);
+  const text = element("span", `cue-row-text ${ROW_TEXT} text-text-dim`);
+  const translation = element("span", `cue-row-translation ${ROW_TEXT} text-accent`);
+  main.append(time, text, translation);
+  el.append(number, main);
 
-  row.addEventListener("click", () => selectCue(index, { seek: true, source: "list" }));
-  return row;
+  return { el, range, dur, tag, text, translation };
 }
 
 function paintRow(row, cue, index) {
   const cps = charsPerSecond(cue);
-  const [range, dur, tag] = row.querySelector(".cue-row-time").children;
-  range.textContent = `${shortTimecode(cue.start)} → ${shortTimecode(cue.end)}`;
-  dur.textContent = `${cueDuration(cue).toFixed(2)}s`;
-  tag.dataset.severity = cpsSeverity(cps);
-  tag.textContent = `${cps.toFixed(1)} cps`;
-  row.querySelector(".cue-row-text").textContent = cue.text || "—";
-  row.querySelector(".cue-row-translation").textContent = cue.translation || "";
-  row.classList.toggle("is-selected", index === state.selected);
-  row.classList.toggle("is-active", index === state.activeCue);
+  row.range.textContent = `${shortTimecode(cue.start)} → ${shortTimecode(cue.end)}`;
+  row.dur.textContent = `${cueDuration(cue).toFixed(2)}s`;
+  row.tag.dataset.severity = cpsSeverity(cps);
+  row.tag.textContent = `${cps.toFixed(1)} cps`;
+  row.text.textContent = cue.text || "—";
+  row.translation.textContent = cue.translation || "";
+  row.el.classList.toggle("is-selected", index === state.selected);
+  row.el.classList.toggle("is-active", index === state.activeCue);
 }
 
 export function renderList() {
   const list = cues();
   $("#cue-count").textContent = String(list.length);
   $("#status-cues").textContent = `${list.length} cue`;
-  listNode.replaceChildren();
-  rows = [];
 
   if (!list.length) {
-    listNode.appendChild(emptyNode);
+    rows.length = 0;
+    listNode.replaceChildren(emptyNode);
     return;
   }
+  if (emptyNode.parentElement) emptyNode.remove();
 
-  const fragment = document.createDocumentFragment();
-  list.forEach((cue, index) => {
-    const row = buildRow(cue, index);
-    paintRow(row, cue, index);
-    fragment.appendChild(row);
-    rows.push(row);
-  });
-  listNode.appendChild(fragment);
+  // Grow or shrink to fit, then repaint — the rows that survive keep their DOM.
+  while (rows.length > list.length) rows.pop().el.remove();
+  if (rows.length < list.length) {
+    const fragment = document.createDocumentFragment();
+    while (rows.length < list.length) {
+      const row = buildRow(rows.length);
+      rows.push(row);
+      fragment.appendChild(row.el);
+    }
+    listNode.appendChild(fragment);
+  }
+  list.forEach((cue, index) => paintRow(rows[index], cue, index));
 }
 
 function patchRow(index) {
@@ -94,8 +96,8 @@ function patchRow(index) {
 
 function refreshFlags() {
   rows.forEach((row, index) => {
-    row.classList.toggle("is-selected", index === state.selected);
-    row.classList.toggle("is-active", index === state.activeCue);
+    row.el.classList.toggle("is-selected", index === state.selected);
+    row.el.classList.toggle("is-active", index === state.activeCue);
   });
 }
 
@@ -118,6 +120,13 @@ export function mountCueList() {
   $("#prev-cue").addEventListener("click", () => stepCue(-1));
   $("#next-cue").addEventListener("click", () => stepCue(1));
 
+  // One delegated listener for the whole list — rows carry their index in the DOM.
+  listNode.addEventListener("click", (event) => {
+    const row = event.target.closest(".cue-row");
+    if (!row) return;
+    selectCue(Number(row.dataset.index), { seek: true, source: "list" });
+  });
+
   on("job:loaded", renderList);
   on("cues:changed", renderList);
   on("cue:patched", ({ index }) => patchRow(index));
@@ -125,7 +134,7 @@ export function mountCueList() {
   on("selection:changed", ({ source }) => {
     refreshFlags();
     if (source !== "list" && state.selected >= 0) {
-      rows[state.selected]?.scrollIntoView({ block: "nearest" });
+      rows[state.selected]?.el.scrollIntoView({ block: "nearest" });
     }
   });
   renderList();

@@ -22,6 +22,27 @@ function applyLayout() {
   root.setProperty("--h-inspector", `${layout.inspector}px`);
 }
 
+/* These custom properties live on :root, so writing them invalidates style for
+   the whole document — every clip and cue row included. A pointermove burst must
+   collapse into one write per frame or the drag pays that cost several times
+   over between two painted frames. */
+let layoutFrame = 0;
+
+function scheduleLayout() {
+  if (layoutFrame) return;
+  layoutFrame = requestAnimationFrame(() => {
+    layoutFrame = 0;
+    applyLayout();
+  });
+}
+
+/** Apply the pending value now — the drag is over and callers need final sizes. */
+function flushLayout() {
+  if (layoutFrame) cancelAnimationFrame(layoutFrame);
+  layoutFrame = 0;
+  applyLayout();
+}
+
 function persistLayout() {
   localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
 }
@@ -54,7 +75,7 @@ function initSplitters() {
     const resize = (value) => {
       const [min, max] = BOUNDS[key];
       layout[key] = clamp(value, min, max);
-      applyLayout();
+      scheduleLayout();
     };
 
     splitter.addEventListener("pointerdown", (event) => {
@@ -75,6 +96,8 @@ function initSplitters() {
         window.removeEventListener("pointerup", onUp);
         splitter.classList.remove("is-active");
         workbench.classList.remove("is-resizing", "is-resizing-v");
+        // The timeline measures the scroller, so the last size has to be live first.
+        flushLayout();
         persistLayout();
         timeline.render();
       };
@@ -87,6 +110,7 @@ function initSplitters() {
       if (nudge === undefined) return;
       event.preventDefault();
       resize(layout[key] + nudge * direction);
+      flushLayout();
       persistLayout();
       timeline.render();
     });

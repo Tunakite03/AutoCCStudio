@@ -30,7 +30,7 @@ export function updateCueTimes(index, { start, end }, historyKey, title) {
   const nextEnd = Math.max(nextStart + MIN_CUE_DURATION, end);
   // A drag that ran into a neighbour changes nothing — don't spend an undo step on it.
   if (cue.start === nextStart && cue.end === nextEnd) return;
-  pushHistory(historyKey, title);
+  pushHistory(historyKey, title, index);
   cue.start = nextStart;
   cue.end = nextEnd;
   emit("cue:patched", { index });
@@ -39,7 +39,7 @@ export function updateCueTimes(index, { start, end }, historyKey, title) {
 export function updateCueText(index, field, value, historyKey, title) {
   const cue = cueAt(index);
   if (!cue || cue[field] === value) return;
-  pushHistory(historyKey, title);
+  pushHistory(historyKey, title, index);
   cue[field] = value;
   emit("cue:patched", { index });
 }

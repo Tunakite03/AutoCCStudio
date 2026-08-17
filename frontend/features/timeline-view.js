@@ -117,7 +117,16 @@ export function mountTimelineView() {
     engine.resolvePendingFit();
   });
 
-  window.addEventListener("resize", () => engine.render());
+  // A resize fires in bursts while the window is dragged, and a full render
+  // repositions every clip — collapse the burst into one render per frame.
+  let resizeFrame = 0;
+  window.addEventListener("resize", () => {
+    if (resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      engine.render();
+    });
+  });
 
   engine.render();
   $("#status-zoom").textContent = `${Math.round(engine.pps)} px/s`;

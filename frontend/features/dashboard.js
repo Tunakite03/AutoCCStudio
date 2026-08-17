@@ -108,7 +108,6 @@ const CARD_TOOL =
 function buildCard(project) {
   const card = element("article", CARD);
   card.dataset.id = project.id;
-  if (project.id === state.job?.id) card.classList.add("is-open");
 
   /* Thumbnail */
   const media = element(
@@ -205,11 +204,27 @@ function buildCard(project) {
   return card;
 }
 
-function render() {
-  renderStats();
+/* Cards are keyed by the project object, which is only replaced when the list is
+   re-fetched. Filtering and searching then reorder nodes that already exist —
+   rebuilding them would re-create every <img> and drop the loaded thumbnails. */
+const cardCache = new WeakMap();
+
+function cardFor(project) {
+  let card = cardCache.get(project);
+  if (!card) {
+    card = buildCard(project);
+    cardCache.set(project, card);
+  }
+  // Which project is open changes without the list being re-fetched.
+  card.classList.toggle("is-open", project.id === state.job?.id);
+  return card;
+}
+
+/** Grid only — the stats above it read the whole workspace, not the filter. */
+function renderGrid() {
   const visible = visibleProjects();
   $("#dash-count").textContent = `${visible.length} project`;
-  grid.replaceChildren(...visible.map(buildCard));
+  grid.replaceChildren(...visible.map(cardFor));
 
   emptyNote.hidden = visible.length > 0;
   if (!visible.length) {
@@ -219,6 +234,11 @@ function render() {
       ? "Thử bỏ bộ lọc hoặc xóa từ khóa tìm kiếm."
       : "Tạo phụ đề cho video đầu tiên để nó xuất hiện ở đây.";
   }
+}
+
+function render() {
+  renderStats();
+  renderGrid();
 }
 
 /* ── Actions ──────────────────────────────────────────────────── */
@@ -259,9 +279,13 @@ async function askDelete(project) {
 /* ── Mount ────────────────────────────────────────────────────── */
 
 export function mountDashboard() {
+  // Typing is a burst: filtering the whole workspace on every keystroke is work
+  // nobody reads, and the grid it produces is thrown away by the next character.
+  let searchTimer = 0;
   $("#dash-search").addEventListener("input", (event) => {
     search = event.target.value;
-    render();
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderGrid, 160);
   });
 
   $$("#dash-filters .seg").forEach((button) => {
@@ -269,7 +293,7 @@ export function mountDashboard() {
       $$("#dash-filters .seg").forEach((item) => item.classList.remove("is-active"));
       button.classList.add("is-active");
       filter = button.dataset.filter;
-      render();
+      renderGrid();
     });
   });
 
