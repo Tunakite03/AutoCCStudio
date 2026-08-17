@@ -1,0 +1,42 @@
+
+# Compose file dùng trên VM production.
+#
+# Khác docker-compose.yml (dùng cho máy dev) ở chỗ không có `build:` — VM không
+# giữ source code, nó chỉ pull image đã được GitHub Actions build sẵn và đẩy lên
+# GHCR. Deploy vì thế là một lần `docker compose pull`, không phải một lần build
+# vài phút trên 2 vCPU.
+#
+# AUTOCC_IMAGE do workflow deploy truyền vào qua biến môi trường của shell, chứ
+# không đọc từ .env: file .env trên VM là nơi giữ API key, không nên bị workflow
+# ghi đè mỗi lần deploy.
+#
+#   AUTOCC_IMAGE=ghcr.io/tunakite03/autoccstudio:<sha> \
+#     docker compose -f docker-compose.prod.yml up -d
+
+services:
+     autocc:
+          image: ${AUTOCC_IMAGE:?AUTOCC_IMAGE chua duoc set}
+          container_name: autocc
+          restart: unless-stopped
+          ports:
+               # Không có nginx phía trước nên container bind thẳng ra ngoài.
+               # Đổi AUTOCC_PORT nếu sau này đặt reverse proxy lên trước.
+               - '${AUTOCC_PORT:-8000}:8000'
+          env_file:
+               - .env
+          volumes:
+               # Job và media nằm ngoài container để không mất khi deploy phiên bản mới.
+               - ./runtime:/app/runtime
+          healthcheck:
+               # curl đã có sẵn trong image (Dockerfile cài cùng ffmpeg).
+               test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8000/api/health']
+               interval: 30s
+               timeout: 5s
+               retries: 3
+               # Import faster-whisper/av mất vài giây trước khi cổng mở.
+               start_period: 30s
+          logging:
+               driver: json-file
+               options:
+                    max-size: '10m'
+                    max-file: '3'

@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [ "main", "master" ]
 
+# Hai lần push liên tiếp lên main không được deploy chồng lên nhau: lần sau huỷ
+# lần trước để VM không nhận hai `compose up` cùng lúc.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test & Lint (Python 3.12)
@@ -34,3 +40,136 @@ jobs:
       - name: Run Tests
         run: |
           python -m pytest
+
+  build:
+    name: Build & push image (GHCR)
+    needs: test
+    # Chỉ push lên main mới build image; pull request dừng ở job test.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve image name
+        id: name
+        # GHCR chỉ nhận tên viết thường, còn github.repository giữ nguyên hoa thường
+        # của repo (Tunakite03/AutoCCStudio) nên phải hạ chữ ở đây.
+        run: |
+          repo="${GITHUB_REPOSITORY,,}"
+          echo "repo=ghcr.io/${repo}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${repo}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Tag theo SHA là thứ deploy dùng — bất biến, rollback được.
+          # `latest` chỉ để tiện pull tay trên VM khi cần.
+          tags: |
+            ${{ steps.name.outputs.image }}
+            ${{ steps.name.outputs.repo }}:latest
+          # Cache layer pip giữa các lần build; không có nó mỗi deploy phải cài
+          # lại faster-whisper/av từ đầu.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Azure VM
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy compose file to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          source: docker-compose.prod.yml
+          target: ${{ vars.DEPLOY_PATH || '/opt/autocc' }}
+
+      - name: Pull & restart
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          AUTOCC_IMAGE: ${{ needs.build.outputs.image }}
+          GHCR_USER: ${{ github.actor }}
+          # Token của chính workflow run này, hết hạn khi job kết thúc — VM không
+          # phải giữ PAT dài hạn để pull image private.
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/autocc' }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          envs: AUTOCC_IMAGE,GHCR_USER,GHCR_TOKEN,DEPLOY_PATH
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+
+            # .env là file duy nhất workflow không đụng tới; nó phải có sẵn trên VM.
+            test -f .env || { echo "Thieu $DEPLOY_PATH/.env"; exit 1; }
+            mkdir -p runtime
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker logout ghcr.io
+
+            # Giữ lại image của lần deploy trước để rollback tay được; chỉ dọn
+            # những layer không còn tag nào trỏ tới.
+            docker image prune -f
+
+      - name: Smoke test /api/health
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/autocc' }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: ${{ secrets.VM_SSH_PORT || 22 }}
+          envs: DEPLOY_PATH
+          script_stop: true
+          script: |
+            set -euo pipefail
+            port="$(grep -E '^AUTOCC_PORT=' "$DEPLOY_PATH/.env" | cut -d= -f2 || true)"
+            port="${port:-8000}"
+            # Container mất vài chục giây để nạp xong dependency trước khi mở cổng.
+            for i in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:${port}/api/health" >/dev/null; then
+                echo "Health OK sau ${i} lan thu"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Health check that bai, log container:"
+            docker logs --tail 100 autocc
+            exit 1

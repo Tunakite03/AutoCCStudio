@@ -299,8 +299,11 @@ def test_retranscribe_reuses_the_stored_video_without_an_upload(monkeypatch):
 def test_retranscribe_rejects_jobs_without_a_stored_video():
     job = make_job("subtitle_import", subtitle_name="only-subs.srt")
     try:
-        response = client.post(f"/api/jobs/{job['id']}/transcribe", data={"provider": "deepgram"})
-        assert response.status_code == 400
+        # faster_whisper needs no credentials, so the only thing that can fail
+        # here is the missing video — a provider gated on an API key would reject
+        # the request before the check under test ever runs.
+        response = client.post(f"/api/jobs/{job['id']}/transcribe", data={"provider": "whisper"})
+        assert response.status_code == 400, response.text
         assert response.json()["detail"]["code"] == "err.job.videoGone"
     finally:
         cleanup(job["id"])
@@ -1154,8 +1157,13 @@ def test_capabilities_reports_translation_models():
     assert "translation_models" in data
     assert "openai_compatible" in data["translation_models"]
     assert "transformers" in data["translation_models"]
-    models = [m["value"] for m in data["translation_models"]["openai_compatible"]]
-    assert "mistral-small-latest" in models
+    # Which catalogue comes back depends on LLM_BASE_URL, so this test only
+    # asserts the picker is populated and well-formed; the host-to-catalogue
+    # mapping is covered by the monkeypatched tests further down.
+    for group in ("openai_compatible", "transformers"):
+        options = data["translation_models"][group]
+        assert options, group
+        assert all(item["value"] and item["name"] for item in options)
 
 
 
