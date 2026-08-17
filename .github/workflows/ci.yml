@@ -104,25 +104,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # TẠM THỜI — xoá step này sau khi deploy chạy được.
-      # Chỉ in fingerprint (thông tin công khai) và độ dài, không lộ nội dung key.
-      - name: Debug SSH secrets
-        env:
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_HOST: ${{ secrets.VM_HOST }}
-        run: |
-          printf '%s' "$VM_SSH_KEY" > /tmp/k
-          chmod 600 /tmp/k
-          echo "key bytes : $(wc -c < /tmp/k)"
-          echo "key lines : $(wc -l < /tmp/k)"
-          echo "first line: $(head -1 /tmp/k)"
-          echo "last line : $(tail -1 /tmp/k)"
-          echo "has CRLF  : $(grep -c $'\r' /tmp/k || true)"
-          ssh-keygen -lf /tmp/k || echo ">>> KEY PARSE FAILED"
-          echo "user bytes: $(printf '%s' "$VM_USER" | wc -c)"
-          echo "host bytes: $(printf '%s' "$VM_HOST" | wc -c)"
-
       - name: Copy compose file to VM
         uses: appleboy/scp-action@v0.1.7
         with:
