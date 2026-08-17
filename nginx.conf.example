@@ -1,0 +1,33 @@
+# Cấu hình Nginx mẫu cho AutoCC trên DigitalOcean (Ubuntu)
+# Lưu file vào: /etc/nginx/sites-available/autocc
+# Kích hoạt: sudo ln -s /etc/nginx/sites-available/autocc /etc/nginx/sites-enabled/
+# Test & Reload: sudo nginx -t && sudo systemctl reload nginx
+
+server {
+    listen 80;
+    server_name your-domain.com www.your-domain.com; # Thay bằng IP hoặc domain của bạn
+
+    # Cho phép upload file video lớn (khớp với MAX_UPLOAD_MB trong .env)
+    client_max_body_size 2048M;
+
+    # (Tùy chọn) Bật mật khẩu bảo vệ truy cập nếu muốn dùng cá nhân/nội bộ
+    # auth_basic "Restricted Access - AutoCC";
+    # auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Cấu hình cho Server-Sent Events (SSE) và upload/download streaming
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_set_header Connection '';
+    }
+}

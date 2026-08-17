@@ -164,7 +164,7 @@
 
               <label class="flex flex-col gap-1.25 min-w-0" for="source-language">
                 <span class="text-muted text-[11px] font-medium">Ngôn ngữ audio</span>
-                <select
+                <select aria-describedby="source-language-hint"
                   class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
                   id="source-language">
                   <optgroup label="Tự động / Đa ngôn ngữ">
@@ -254,6 +254,18 @@
                     <option value="ur">اردو (Tiếng Urdu)</option>
                   </optgroup>
                 </select>
+                <!-- Shown while the run would start without an explicit audio
+                     language, so the cost of auto-detect is visible before the
+                     click, not only in the confirm that follows it. -->
+                <p aria-live="polite"
+                  class="items-start gap-1.25 mt-0.5 px-2 py-1.5 border border-accent-line rounded-sm bg-accent-wash text-accent text-[10.5px] leading-[1.4]"
+                  id="source-language-hint" style="display: none">
+                  <svg class="w-3.5 h-3.5 shrink-0 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 3.6 2.9 19.4h18.2z" />
+                    <path d="M12 9.4v4.2M12 16.6v.4" />
+                  </svg>
+                  <span id="source-language-hint-text"></span>
+                </p>
               </label>
 
               <label
@@ -316,17 +328,28 @@
 
               <label class="flex flex-col gap-1.25 min-w-0" for="target-language">
                 <span class="text-muted text-[11px] font-medium">Ngôn ngữ đích</span>
-                <select
+                <!-- value= is the wording sent to the model; data-lang is the ISO
+                     code the same-language guard compares against the source. -->
+                <select aria-describedby="target-language-hint"
                   class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
                   id="target-language">
-                  <option value="Tiếng Việt" selected>Tiếng Việt</option>
-                  <option value="English">English</option>
-                  <option value="日本語">日本語</option>
-                  <option value="한국어">한국어</option>
-                  <option value="中文">中文</option>
-                  <option value="Français">Français</option>
-                  <option value="Español">Español</option>
+                  <option data-lang="vi" value="Tiếng Việt" selected>Tiếng Việt</option>
+                  <option data-lang="en" value="English">English</option>
+                  <option data-lang="ja" value="日本語">日本語</option>
+                  <option data-lang="ko" value="한국어">한국어</option>
+                  <option data-lang="zh" value="中文">中文</option>
+                  <option data-lang="fr" value="Français">Français</option>
+                  <option data-lang="es" value="Español">Español</option>
                 </select>
+                <p aria-live="polite"
+                  class="items-start gap-1.25 mt-0.5 px-2 py-1.5 border border-accent-line rounded-sm bg-accent-wash text-accent text-[10.5px] leading-[1.4]"
+                  id="target-language-hint" style="display: none">
+                  <svg class="w-3.5 h-3.5 shrink-0 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 3.6 2.9 19.4h18.2z" />
+                    <path d="M12 9.4v4.2M12 16.6v.4" />
+                  </svg>
+                  <span id="target-language-hint-text"></span>
+                </p>
               </label>
 
               <label class="flex flex-col gap-1.25 min-w-0" for="translation-style">
