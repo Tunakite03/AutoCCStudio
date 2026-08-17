@@ -1,5 +1,7 @@
 # AutoCC
 
+**Tiếng Việt** | [English](README_EN.md)
+
 AutoCC là MVP local-first để tạo và biên tập phụ đề cho video:
 
 - Import file `.srt` hoặc `.vtt`.
@@ -283,3 +285,8 @@ mỗi batch xong đều được lưu lại, nên một batch hỏng ở phút t
 - Phân tích lượt thoại gọi LLM tuần tự từng batch nên với transcript rất dài vẫn chậm; đã có progress nhưng chưa có cơ chế hủy giữa chừng.
 - Dịch AI cần LLM endpoint đang chạy và có thể cần điều chỉnh prompt/model cho thuật ngữ chuyên ngành.
 - Deepgram là dịch vụ cloud: cần API key, có chi phí theo thời lượng và video được gửi ra ngoài máy.
+
+## License
+
+Dự án được phân phối dưới giấy phép [MIT License](LICENSE).
+

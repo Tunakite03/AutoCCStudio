@@ -1,14 +1,14 @@
 services:
-  autocc:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: autocc
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    volumes:
-      # Mount thư mục runtime ra ngoài host để dữ liệu video/job không bị mất khi container restart/upgrade
-      - ./runtime:/app/runtime
+     autocc:
+          build:
+               context: .
+               dockerfile: Dockerfile
+          container_name: autocc
+          restart: unless-stopped
+          ports:
+               - '8000:8000'
+          env_file:
+               - .env
+          volumes:
+               # Mount thư mục runtime ra ngoài host để dữ liệu video/job không bị mất khi container restart/upgrade
+               - ./runtime:/app/runtime
