@@ -220,15 +220,18 @@ from .. import ai
 def _resolve_translation_engine(provider: str, model: str) -> tuple[str, str]:
     """Validate the translation engine and settle on a model name."""
 
-    raw_provider = provider.strip() or ai.settings.translation_provider
+    raw_provider = provider.strip() or ai.translation.settings.translation_provider
     resolved_provider = ai.resolve_translation_provider(raw_provider)
 
-    if resolved_provider == ai.TRANSLATION_OPENAI_COMPATIBLE and not ai.settings.llm_base_url.strip():
+    if (
+        resolved_provider == ai.TRANSLATION_OPENAI_COMPATIBLE
+        and not ai.translation.settings.llm_base_url.strip()
+    ):
         raise HTTPException(
             status_code=400, detail=detail("err.translation.llmNotConfigured")
         )
     if resolved_provider == ai.TRANSLATION_TRANSFORMERS:
-        default_transformers_model = ai.settings.translation_model.strip()
+        default_transformers_model = ai.translation.settings.translation_model.strip()
         if not (model.strip() or default_transformers_model):
             raise HTTPException(
                 status_code=400,
@@ -236,9 +239,9 @@ def _resolve_translation_engine(provider: str, model: str) -> tuple[str, str]:
             )
 
     default_model = (
-        ai.settings.translation_model
+        ai.translation.settings.translation_model
         if resolved_provider == ai.TRANSLATION_TRANSFORMERS
-        else ai.settings.llm_model
+        else ai.translation.settings.llm_model
     )
     selected_model = model.strip() or default_model
     if len(selected_model) > 128:

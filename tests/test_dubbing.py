@@ -11,6 +11,7 @@ from dataclasses import replace
 import pytest
 
 import backend.ai as ai_module
+import backend.ai.translation as ai_translation
 import backend.dubbing as dubbing
 from backend.dubbing import (
     FIT_EXACT,
@@ -352,11 +353,11 @@ def test_a_stop_request_is_honoured_inside_the_synthesis_pool(tmp_path):
 
 def test_shortening_keeps_only_the_rewrites_that_are_actually_shorter(monkeypatch):
     monkeypatch.setattr(
-        ai_module,
+        ai_translation,
         "_llm_completion",
         lambda *args, **kwargs: '{"1": "Ngắn", "2": "Dài hơn hẳn bản gốc rất nhiều"}',
     )
-    result = ai_module.shorten_for_dubbing(
+    result = ai_translation.shorten_for_dubbing(
         [
             {"id": 1, "text": "Một câu khá dài", "max_chars": 8},
             {"id": 2, "text": "Ngắn thôi", "max_chars": 6},
@@ -367,8 +368,8 @@ def test_shortening_keeps_only_the_rewrites_that_are_actually_shorter(monkeypatc
 
 
 def test_shortening_rejects_a_rewrite_that_threw_the_line_away(monkeypatch):
-    monkeypatch.setattr(ai_module, "_llm_completion", lambda *args, **kwargs: '{"1": "Ừ"}')
-    result = ai_module.shorten_for_dubbing(
+    monkeypatch.setattr(ai_translation, "_llm_completion", lambda *args, **kwargs: '{"1": "Ừ"}')
+    result = ai_translation.shorten_for_dubbing(
         [{"id": 1, "text": "Một câu rất dài với nhiều mệnh đề khác nhau", "max_chars": 30}],
         "Tiếng Việt",
     )
@@ -377,9 +378,9 @@ def test_shortening_rejects_a_rewrite_that_threw_the_line_away(monkeypatch):
 
 def test_shortening_ignores_ids_it_was_never_given(monkeypatch):
     monkeypatch.setattr(
-        ai_module, "_llm_completion", lambda *args, **kwargs: '{"99": "Ngắn"}'
+        ai_translation, "_llm_completion", lambda *args, **kwargs: '{"99": "Ngắn"}'
     )
-    result = ai_module.shorten_for_dubbing(
+    result = ai_translation.shorten_for_dubbing(
         [{"id": 1, "text": "Một câu khá dài", "max_chars": 8}], "Tiếng Việt"
     )
     assert result == {}
@@ -389,8 +390,8 @@ def test_nothing_is_asked_of_the_model_when_there_is_nothing_to_shorten(monkeypa
     def explode(*_args, **_kwargs):
         raise AssertionError("no call should be made")
 
-    monkeypatch.setattr(ai_module, "_llm_completion", explode)
-    assert ai_module.shorten_for_dubbing([]) == {}
+    monkeypatch.setattr(ai_translation, "_llm_completion", explode)
+    assert ai_translation.shorten_for_dubbing([]) == {}
 
 
 # ── Which strategy goes first ────────────────────────────────────────

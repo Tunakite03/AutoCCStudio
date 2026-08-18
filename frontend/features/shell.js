@@ -9,16 +9,42 @@ import { acceptVideoFile, importSubtitleFile } from "./pipeline.js";
 
 const LAYOUT_KEY = "autocc.layout";
 const THEME_KEY = "autocc.theme";
-const BOUNDS = { left: [200, 460], right: [260, 560], dock: [150, 620], inspector: [200, 600] };
+const BOUNDS = {
+  left: [200, 450],
+  right: [260, 560],
+  dock: [150, 620],
+  inspector: [200, 450],
+};
 
 const layout = { left: 268, right: 340, dock: 272, inspector: 390 };
 
 /* ── Resizable panes ──────────────────────────────────────────── */
 
+// Below this window width the workbench drops to a single stacked column
+// (see --breakpoint-stack in custom.css) and the left/right tracks stop
+// applying, so there is nothing to clamp for. Above it, left+right are still
+// two fixed-px grid tracks — a width saved on a wide monitor would otherwise
+// overflow a narrower one, since fixed tracks never shrink below their value.
+const STACK_BREAKPOINT = 960;
+const CENTER_MIN = 320;
+const SPLITTER_RAILS = 10; // two 5px splitters between the three columns
+
+function viewportClamp(left, right) {
+  if (window.innerWidth < STACK_BREAKPOINT) return { left, right };
+  const cap = window.innerWidth - CENTER_MIN - SPLITTER_RAILS;
+  if (left + right <= cap) return { left, right };
+  const scale = Math.max(0, cap) / (left + right);
+  return {
+    left: Math.max(BOUNDS.left[0], Math.floor(left * scale)),
+    right: Math.max(BOUNDS.right[0], Math.floor(right * scale)),
+  };
+}
+
 function applyLayout() {
   const root = document.documentElement.style;
-  root.setProperty("--w-left", `${layout.left}px`);
-  root.setProperty("--w-right", `${layout.right}px`);
+  const { left, right } = viewportClamp(layout.left, layout.right);
+  root.setProperty("--w-left", `${left}px`);
+  root.setProperty("--w-right", `${right}px`);
   root.setProperty("--h-dock", `${layout.dock}px`);
   root.setProperty("--h-inspector", `${layout.inspector}px`);
 }
@@ -89,7 +115,8 @@ function initSplitters() {
       workbench.classList.add(vertical ? "is-resizing-v" : "is-resizing");
 
       const onMove = (moveEvent) => {
-        const delta = (vertical ? moveEvent.clientY : moveEvent.clientX) - origin;
+        const delta =
+          (vertical ? moveEvent.clientY : moveEvent.clientX) - origin;
         resize(startValue + delta * direction);
       };
       const onUp = () => {
@@ -107,7 +134,12 @@ function initSplitters() {
     });
 
     splitter.addEventListener("keydown", (event) => {
-      const nudge = { ArrowLeft: -16, ArrowRight: 16, ArrowUp: -16, ArrowDown: 16 }[event.key];
+      const nudge = {
+        ArrowLeft: -16,
+        ArrowRight: 16,
+        ArrowUp: -16,
+        ArrowDown: 16,
+      }[event.key];
       if (nudge === undefined) return;
       event.preventDefault();
       resize(layout[key] + nudge * direction);
@@ -135,7 +167,8 @@ export const openShortcuts = () => $("#shortcuts-dialog").showModal();
 function initGlobalDrop() {
   const veil = $("#drop-veil");
   let depth = 0;
-  const isFileDrag = (event) => [...(event.dataTransfer?.types || [])].includes("Files");
+  const isFileDrag = (event) =>
+    [...(event.dataTransfer?.types || [])].includes("Files");
 
   window.addEventListener("dragenter", (event) => {
     if (!isFileDrag(event)) return;
@@ -179,7 +212,7 @@ function initLocalePicker() {
       option.value = code;
       option.textContent = name;
       return option;
-    }),
+    })
   );
   select.value = currentLocale();
   select.addEventListener("change", (event) => setLocale(event.target.value));
@@ -192,9 +225,17 @@ export function mountShell() {
   initGlobalDrop();
   initLocalePicker();
 
+  // Re-clamp on resize: shrinking the window (or rotating a tablet) can put the
+  // saved pane widths back over the viewport cap even though nothing was dragged.
+  window.addEventListener("resize", scheduleLayout);
+
   $("#theme-btn").addEventListener("click", () => {
-    applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+    applyTheme(
+      document.documentElement.dataset.theme === "light" ? "dark" : "light"
+    );
   });
   $("#shortcuts-btn").addEventListener("click", openShortcuts);
-  $("#shortcuts-close").addEventListener("click", () => $("#shortcuts-dialog").close());
+  $("#shortcuts-close").addEventListener("click", () =>
+    $("#shortcuts-dialog").close()
+  );
 }

@@ -74,12 +74,14 @@ export const en = {
   "dub.shorten": "Let the AI shorten lines that will not fit",
   "dub.shortenNote":
     "A line too long to say in time is rewritten shorter by the LLM and recorded again. Turned off, it is simply read faster.",
-  "dub.keepOriginalTrack": "Keep the original audio as a second track on export",
+  "dub.keepOriginalTrack":
+    "Keep the original audio as a second track on export",
   "dub.preview": "Play the dub",
   "dub.previewHint": "The video mutes itself while the dub plays",
   "dub.noPreview": "No dub yet",
   "dub.report": "Voiced {voiced}/{total} lines",
-  "dub.reportFits": " · sped up {spedUp} · spilled {spill} · shortened {shortened}",
+  "dub.reportFits":
+    " · sped up {spedUp} · spilled {spill} · shortened {shortened}",
   "dub.reportOverflow": " · {count} still too long",
   "dub.stale":
     "The subtitles changed after this dub was made, so the recording is out of date. Dub again to catch up — every line that did not change is reused.",
@@ -127,7 +129,7 @@ export const en = {
   "track.both": "Both",
   "track.translation": "Translation",
   "track.off": "Off",
-  "track.subtitleHead": "SUBTITLES",
+  "track.subtitleHead": "SUB",
 
   "tool.undo": "Undo (Ctrl Z)",
   "tool.undoOf": "Undo: {title} (Ctrl Z)",
@@ -160,7 +162,8 @@ export const en = {
   "cuelist.title": "Cue list",
   "cuelist.aria": "Cues",
   "cuelist.empty": "No cues yet.",
-  "cuelist.emptyNote": "Pick a video for the AI to transcribe, or import an SRT/VTT file.",
+  "cuelist.emptyNote":
+    "Pick a video for the AI to transcribe, or import an SRT/VTT file.",
   "inspector.prev": "Previous cue",
   "inspector.next": "Next cue",
   "inspector.index": "Cue {index} / {total}",
@@ -278,7 +281,8 @@ export const en = {
   "toast.needCuesToTranslate": "There have to be cues before translating",
   "toast.pickCueToTranslateFrom": "Select the cue to translate from",
   "toast.needCuesToAnalyze": "There have to be cues before analysing",
-  "toast.reanalyzing": "Re-analysing dialogue turns without calling Deepgram again",
+  "toast.reanalyzing":
+    "Re-analysing dialogue turns without calling Deepgram again",
   "toast.needCuesToDub": "There has to be dialogue before it can be voiced",
   "toast.dubQueued": "Dubbing queued",
   "toast.dubbed": "Dub finished — press play to hear it",
@@ -292,7 +296,8 @@ export const en = {
   "toast.styleDeleted": "Deleted the style “{name}”",
   "toast.translationQueued": "The subtitle is queued for translation",
   "toast.translatingFrom": "Resuming the translation from cue {cue}",
-  "toast.stopRequested": "Stop requested — waiting for the current step to finish",
+  "toast.stopRequested":
+    "Stop requested — waiting for the current step to finish",
   "toast.stoppedWith": "Job stopped · {kept}",
   "toast.subtitlesWithWarning": "Subtitles created, but {warning}",
   "toast.partialWithWarning": "Split what was valid; {warning}",
@@ -355,7 +360,8 @@ export const en = {
   "guard.whisperDetail":
     "Whisper detects the language from the opening audio and applies it to the whole video. If it starts with music, silence or another language, the entire transcript drifts with it.",
   "guard.autoTitle": "No audio language chosen",
-  "guard.autoHint": "Left on auto-detect — naming the audio language is faster and more accurate.",
+  "guard.autoHint":
+    "Left on auto-detect — naming the audio language is faster and more accurate.",
   "guard.autoNote":
     "Naming the video's actual audio language (Vietnamese, English…) makes recognition noticeably faster and more accurate.\n\n{detail}",
   "guard.autoConfirm": "Carry on with auto-detect",
@@ -401,7 +407,7 @@ export const en = {
   "shortcut.mute": "Mute",
   "shortcut.run": "Run AI recognition",
   "shortcuts.footnote":
-    "On the timeline: drag a clip's body to move it, its edges to resize, the ruler to scrub. Hold <kbd class=\"mono\">Ctrl</kbd> while scrolling to zoom. Dragging during playback pauses the video and resumes it when you let go.",
+    'On the timeline: drag a clip\'s body to move it, its edges to resize, the ruler to scrub. Hold <kbd class="mono">Ctrl</kbd> while scrolling to zoom. Dragging during playback pauses the video and resumes it when you let go.',
 
   /* ── Undo history labels ────────────────────────────────────── */
   "history.addCue": "add a cue",
@@ -437,7 +443,8 @@ export const en = {
     "Saves the selected style together with the house rules below, so next time it is one click. Reusing a name overwrites that style.",
   "style.namePlaceholder": "e.g. Thai drama, light register",
   "style.overwriteTitle": "Overwrite the existing style?",
-  "style.overwriteNote": "A style by this name already exists. Its rules will be replaced by what is in the box.",
+  "style.overwriteNote":
+    "A style by this name already exists. Its rules will be replaced by what is in the box.",
   "style.deleteTitle": "Delete this style?",
   "style.deleteNote":
     "Only the shortcut goes. Projects already translated keep their translation, and the rules stay in the box below.",
@@ -506,7 +513,8 @@ export const en = {
 
   /* ── Errors (backend codes) ─────────────────────────────────── */
   "err.raw": "{text}",
-  "err.unexpected": "Unexpected failure while working ({type}). See the server log for details.",
+  "err.unexpected":
+    "Unexpected failure while working ({type}). See the server log for details.",
   "err.http": "Error {status}",
 
   "err.job.notFound": "No such job",
@@ -514,7 +522,8 @@ export const en = {
   "err.job.busyCueEdit": "The job is running, so cues cannot be edited",
   "err.job.notRunning": "The job is no longer running",
   "err.job.videoGone": "This project no longer has its video on the server",
-  "err.job.interrupted": "The job was interrupted by an app restart; run it again",
+  "err.job.interrupted":
+    "The job was interrupted by an app restart; run it again",
   "err.job.noCuesToAnalyze": "The job has no cues to analyse",
   "err.job.noCuesToTranslate": "The job has no cues to translate",
   "err.job.noCuesToSplit": "The job has no cues to split",
@@ -539,10 +548,12 @@ export const en = {
   "err.translation.transformersModelMissing":
     "TRANSLATION_MODEL is not configured for local Transformers.",
   "err.translation.targetMissing": "No target language was given",
-  "err.translation.styleNotesTooLong": "House rules are limited to {limit} characters",
+  "err.translation.styleNotesTooLong":
+    "House rules are limited to {limit} characters",
   "err.translation.badStyle": "Unknown translation style",
   "err.translation.badFromCue": "Invalid starting cue position",
-  "err.translation.noCuesFromHere": "There are no cues from that position onwards",
+  "err.translation.noCuesFromHere":
+    "There are no cues from that position onwards",
 
   "err.style.nameMissing": "A style needs a name",
   "err.style.nameTooLong": "A style name is limited to {limit} characters",
@@ -558,9 +569,11 @@ export const en = {
   "err.download.badFormat": "Format has to be srt or vtt",
   "err.download.badTrack": "Track has to be source or translated",
 
-  "err.speakerAnalysis.notConfigured": "No LLM is configured for dialogue-turn analysis",
+  "err.speakerAnalysis.notConfigured":
+    "No LLM is configured for dialogue-turn analysis",
   "err.speakerAnalysis.stopped": "Stopped on request",
-  "err.speakerAnalysis.partial": "The AI left {failed}/{total} cues that failed validation",
+  "err.speakerAnalysis.partial":
+    "The AI left {failed}/{total} cues that failed validation",
   "err.speakerAnalysis.failed":
     "The AI returned no valid cue; the acoustic diarisation was kept instead",
 
@@ -573,22 +586,26 @@ export const en = {
   "err.dub.badAudioChoice": "Audio has to be original, dubbed or both",
   "err.dub.nothingToVoice": "There is nothing to read out",
   "err.dub.allVoicesFailed": "Not one line could be voiced ({failed} failed)",
-  "err.dub.partial": "{failed}/{total} lines could not be voiced and were left silent",
+  "err.dub.partial":
+    "{failed}/{total} lines could not be voiced and were left silent",
   "err.dub.stopped": "Stopped on request",
   "err.dub.noTrack": "This project has no dub yet",
   "err.dub.trackFileGone": "The dub file is no longer in the workspace",
 
   "err.tts.badProvider": "Unknown voice provider: {provider}",
-  "err.tts.edgeMissing": "edge-tts is not installed. Run: pip install -r requirements.txt",
+  "err.tts.edgeMissing":
+    "edge-tts is not installed. Run: pip install -r requirements.txt",
   "err.tts.badVoice": "That voice name is too long",
   "err.tts.emptyText": "An empty line cannot be read out",
   "err.tts.emptyAudio": "The voice provider returned empty audio",
-  "err.tts.timeout": "The voice provider did not answer within {seconds} seconds",
+  "err.tts.timeout":
+    "The voice provider did not answer within {seconds} seconds",
   "err.tts.requestFailed": "The voice provider failed: {cause}",
 
   "err.ffmpeg.missing": "ffmpeg was not found on PATH",
   "err.ffmpeg.timeout": "ffmpeg ran past {seconds} seconds while {operation}",
-  "err.ffmpeg.launchFailed": "ffmpeg could not be launched while {operation}: {cause}",
+  "err.ffmpeg.launchFailed":
+    "ffmpeg could not be launched while {operation}: {cause}",
   "err.ffmpeg.failed": "ffmpeg failed while {operation}: {detail}",
   "err.ffmpeg.noThumbnail": "ffmpeg produced no thumbnail",
   "err.ffmpeg.noMuxedVideo": "ffmpeg produced no subtitled video file",
@@ -596,10 +613,12 @@ export const en = {
   "err.media.noAudioTrack": "The video has no audio track",
   "err.muxFailed": "Could not mux the subtitle into the video",
 
-  "err.http.requestsMissing": "requests is not installed. Run: pip install -r requirements.txt",
+  "err.http.requestsMissing":
+    "requests is not installed. Run: pip install -r requirements.txt",
   "err.http.poolExhausted":
     "All {keys} {label} API keys are rate limited (HTTP 429) after {tried} attempts. Wait for the quota to recover, or add a new key to .env: {detail}",
-  "err.http.unreachable": "Could not reach {label}: {cause} (after {attempts} attempts)",
+  "err.http.unreachable":
+    "Could not reach {label}: {cause} (after {attempts} attempts)",
   "err.http.rateLimited":
     "{label} stayed rate limited (HTTP 429) after {attempts} attempts: {detail}",
   "err.http.keysRejected":
@@ -607,36 +626,48 @@ export const en = {
   "err.http.status": "{label} returned HTTP {status}: {detail}",
   "err.http.notJson": "{label} returned something that is not JSON",
 
-  "err.ai.whisperMissing": "faster-whisper is not installed. Run: pip install -r requirements.txt",
+  "err.ai.whisperMissing":
+    "faster-whisper is not installed. Run: pip install -r requirements.txt",
   "err.ai.badTranscriptionProvider":
     "TRANSCRIPTION_PROVIDER has to be faster_whisper or deepgram",
   "err.ai.whisperFailed": "Whisper could not process the video: {cause}",
   "err.ai.deepgramKeyMissing":
     "DEEPGRAM_API_KEY is not configured. Add the key to .env and restart the app.",
   "err.ai.deepgramBadJson": "Deepgram returned invalid JSON",
-  "err.ai.deepgramNoUtterances": "The Deepgram response has no results.utterances",
-  "err.ai.deepgramBadUtterances": "The Deepgram response has invalid utterances",
-  "err.ai.deepgramModelMissing": "Pick a Deepgram model before running recognition",
-  "err.ai.deepgramNoSpeech": "Deepgram found no timestamped speech in the video",
+  "err.ai.deepgramNoUtterances":
+    "The Deepgram response has no results.utterances",
+  "err.ai.deepgramBadUtterances":
+    "The Deepgram response has invalid utterances",
+  "err.ai.deepgramModelMissing":
+    "Pick a Deepgram model before running recognition",
+  "err.ai.deepgramNoSpeech":
+    "Deepgram found no timestamped speech in the video",
   "err.ai.llmBaseUrlMissing": "LLM_BASE_URL is not configured for {operation}",
   "err.ai.llmModelMissing": "No LLM model is configured for {operation}",
   "err.ai.llmRequestFailed": "{cause} (during {operation})",
   "err.ai.llmMalformedResponse":
     "The LLM response has no choices[0].message.content during {operation}",
-  "err.ai.badTransformersDevice": "TRANSFORMERS_DEVICE has to be auto, cpu or a GPU index",
+  "err.ai.badTransformersDevice":
+    "TRANSFORMERS_DEVICE has to be auto, cpu or a GPU index",
   "err.ai.transformersModelRequired":
     "TRANSLATION_MODEL is required when TRANSLATION_PROVIDER=transformers",
-  "err.ai.transformersMissing": "transformers/torch are not installed for local translation",
-  "err.ai.transformersLoadFailed": "Could not load the translation model {model}: {cause}",
+  "err.ai.transformersMissing":
+    "transformers/torch are not installed for local translation",
+  "err.ai.transformersLoadFailed":
+    "Could not load the translation model {model}: {cause}",
   "err.ai.transformersTargetMismatch":
     "The local translation model is only configured for {language}",
-  "err.ai.transformersFailed": "The local translation model could not handle the cue: {cause}",
-  "err.ai.transformersBadOutput": "The local translation model returned invalid data",
+  "err.ai.transformersFailed":
+    "The local translation model could not handle the cue: {cause}",
+  "err.ai.transformersBadOutput":
+    "The local translation model returned invalid data",
   "err.ai.notJson": "The model returned invalid JSON",
   "err.ai.dialogueNotJson": "The dialogue-turn AI returned invalid JSON",
-  "err.ai.dialogueBadShape": "The dialogue-turn AI returned no object keyed by cue_id",
+  "err.ai.dialogueBadShape":
+    "The dialogue-turn AI returned no object keyed by cue_id",
   "err.ai.translationNotJson": "The translation model returned invalid JSON",
-  "err.ai.translationBadShape": "The translation model returned no translations keyed by id",
+  "err.ai.translationBadShape":
+    "The translation model returned no translations keyed by id",
   "err.ai.translationIncomplete":
     "The model failed to translate {missing}/{total} lines of the batch (lines {lines})",
   "err.ai.translationCountMismatch":

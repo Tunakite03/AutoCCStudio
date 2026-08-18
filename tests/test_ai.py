@@ -10,6 +10,11 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 import backend.ai as ai
+import backend.ai.diarization as ai_diarization
+import backend.ai.llm as ai_llm
+import backend.ai.shared as ai_shared
+import backend.ai.transcription as ai_transcription
+import backend.ai.translation as ai_translation
 import backend.subtitles as subtitles
 from backend.cancellation import OperationCancelled
 
@@ -28,8 +33,8 @@ def test_a_stop_inside_the_decoding_loop_is_not_relabelled_a_whisper_failure(mon
                 ]
             ), SimpleNamespace(language="en")
 
-    monkeypatch.setattr(ai, "_whisper_model", lambda *_args: FakeModel())
-    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 2.0)
+    monkeypatch.setattr(ai_transcription, "_whisper_model", lambda *_args: FakeModel())
+    monkeypatch.setattr(ai_transcription, "media_duration_seconds", lambda _path: 2.0)
 
     reports = {"n": 0}
 
@@ -56,8 +61,8 @@ def test_transcription_clamps_segments_to_media_duration(monkeypatch):
                 ]
             ), SimpleNamespace(language="en")
 
-    monkeypatch.setattr(ai, "_whisper_model", lambda *_args: FakeModel())
-    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 46.09161)
+    monkeypatch.setattr(ai_transcription, "_whisper_model", lambda *_args: FakeModel())
+    monkeypatch.setattr(ai_transcription, "media_duration_seconds", lambda _path: 46.09161)
 
     cues, language = ai.transcribe_video(
         Path("test.mp4"),
@@ -94,8 +99,8 @@ def test_deepgram_transcription_uses_diarized_utterances(monkeypatch):
         captured["params"] = params
         return payload
 
-    monkeypatch.setattr(ai, "_request_deepgram", fake_request)
-    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 5.0)
+    monkeypatch.setattr(ai_transcription, "_request_deepgram", fake_request)
+    monkeypatch.setattr(ai_transcription, "media_duration_seconds", lambda _path: 5.0)
 
     cues, language = ai.transcribe_video(
         Path("conversation.mp4"),
@@ -165,7 +170,7 @@ def test_deepgram_uses_word_level_speakers_inside_one_utterance():
         }
     }
 
-    cues = ai._deepgram_cues(payload, media_duration=5.0)
+    cues = ai_transcription._deepgram_cues(payload, media_duration=5.0)
 
     assert len(cues) == 2
     assert cues[0]["text"] == "How much?"
@@ -216,7 +221,7 @@ def test_deepgram_segments_long_utterances_into_short_cues():
         }
     }
 
-    cues = ai._deepgram_cues(payload, media_duration=10.0)
+    cues = ai_transcription._deepgram_cues(payload, media_duration=10.0)
 
     assert len(cues) == 3
     assert cues[0]["text"] == "How's everything coming along?"
@@ -245,11 +250,11 @@ def test_deepgram_explicit_language_disables_detection(monkeypatch):
         }
     }
     monkeypatch.setattr(
-        ai,
+        ai_transcription,
         "_request_deepgram",
         lambda _path, params, on_progress=None: captured.update(params) or payload,
     )
-    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 2.0)
+    monkeypatch.setattr(ai_transcription, "media_duration_seconds", lambda _path: 2.0)
 
     _, language = ai.transcribe_video(
         Path("conversation.mp4"), provider="deepgram", language="vi"
@@ -272,11 +277,11 @@ def test_deepgram_multilingual_language_option(monkeypatch):
         }
     }
     monkeypatch.setattr(
-        ai,
+        ai_transcription,
         "_request_deepgram",
         lambda _path, params, on_progress=None: captured.update(params) or payload,
     )
-    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 2.0)
+    monkeypatch.setattr(ai_transcription, "media_duration_seconds", lambda _path: 2.0)
 
     _, language = ai.transcribe_video(
         Path("conversation.mp4"), provider="deepgram", language="multi"
@@ -295,8 +300,8 @@ def test_whisper_normalizes_regional_language_code(monkeypatch):
             received_kwargs.update(kwargs)
             return iter([SimpleNamespace(start=0.0, end=1.0, text="Test")]), SimpleNamespace(language="en")
 
-    monkeypatch.setattr(ai, "_whisper_model", lambda *_args: FakeModel())
-    monkeypatch.setattr(ai, "media_duration_seconds", lambda _path: 2.0)
+    monkeypatch.setattr(ai_transcription, "_whisper_model", lambda *_args: FakeModel())
+    monkeypatch.setattr(ai_transcription, "media_duration_seconds", lambda _path: 2.0)
 
     ai.transcribe_video(Path("test.mp4"), provider="faster_whisper", language="en-US")
     assert received_kwargs["language"] == "en"
@@ -331,17 +336,17 @@ def test_deepgram_http_request_streams_media_and_auth(monkeypatch, tmp_path):
     media_path = tmp_path / "sample.mp4"
     media_path.write_bytes(b"fake-mp4-payload")
     monkeypatch.setattr(
-        ai,
+        ai_transcription,
         "settings",
         replace(
-            ai.settings,
+            ai_transcription.settings,
             deepgram_api_key="integration-key",
             deepgram_base_url=f"http://127.0.0.1:{server.server_port}",
         ),
     )
 
     try:
-        payload = ai._request_deepgram(
+        payload = ai_transcription._request_deepgram(
             media_path,
             {
                 "model": "nova-3",
@@ -392,19 +397,19 @@ def test_deepgram_http_request_extracts_audio_and_cleans_up(monkeypatch, tmp_pat
     audio_file = tmp_path / "extracted.m4a"
     audio_file.write_bytes(b"extracted-m4a-audio-data")
 
-    monkeypatch.setattr(ai, "extract_transcription_audio", lambda _path: audio_file)
+    monkeypatch.setattr(ai_transcription, "extract_transcription_audio", lambda _path: audio_file)
     monkeypatch.setattr(
-        ai,
+        ai_transcription,
         "settings",
         replace(
-            ai.settings,
+            ai_transcription.settings,
             deepgram_api_key="test-key",
             deepgram_base_url=f"http://127.0.0.1:{server.server_port}",
         ),
     )
 
     try:
-        payload = ai._request_deepgram(
+        payload = ai_transcription._request_deepgram(
             tmp_path / "huge_movie.mp4",
             {"model": "nova-3"},
         )
@@ -424,9 +429,9 @@ def test_deepgram_http_request_extracts_audio_and_cleans_up(monkeypatch, tmp_pat
 
 def test_mock_translation_preserves_timing_and_batch_order(monkeypatch):
     monkeypatch.setattr(
-        ai,
+        ai_translation,
         "settings",
-        replace(ai.settings, translation_provider="mock"),
+        replace(ai_translation.settings, translation_provider="mock"),
     )
     cues = [
         {"id": 1, "start": 0, "end": 1, "text": "Hello", "translation": ""},
@@ -442,9 +447,9 @@ def test_mock_translation_preserves_timing_and_batch_order(monkeypatch):
 
 def test_translation_preserves_dialogue_lines_and_speaker_metadata(monkeypatch):
     monkeypatch.setattr(
-        ai,
+        ai_translation,
         "settings",
-        replace(ai.settings, translation_provider="mock"),
+        replace(ai_translation.settings, translation_provider="mock"),
     )
     cues = [
         {
@@ -466,16 +471,16 @@ def test_translation_preserves_dialogue_lines_and_speaker_metadata(monkeypatch):
 
 def _hosted_translation(monkeypatch, completion):
     monkeypatch.setattr(
-        ai,
+        ai_translation,
         "settings",
         replace(
-            ai.settings,
+            ai_translation.settings,
             translation_provider="mistral",
             llm_base_url="http://127.0.0.1:1/v1",
             llm_model="translate-model",
         ),
     )
-    monkeypatch.setattr(ai, "_llm_completion", completion)
+    monkeypatch.setattr(ai_translation, "_llm_completion", completion)
 
 
 def _request_payload(messages):
@@ -643,7 +648,7 @@ def test_dialogue_analysis_inserts_only_line_breaks(monkeypatch):
             1: "How much is the ticket?\nThe fare is $5.50.\nCan I pay cash?\nYes."
         }
 
-    monkeypatch.setattr(ai, "_analyze_dialogue_batch", fake_analyze)
+    monkeypatch.setattr(ai_diarization, "_analyze_dialogue_batch", fake_analyze)
     cues = [
         {
             "id": 1,
@@ -666,7 +671,7 @@ def test_dialogue_analysis_inserts_only_line_breaks(monkeypatch):
 
 def test_dialogue_analysis_keeps_original_when_retry_still_changes_transcript(monkeypatch):
     monkeypatch.setattr(
-        ai,
+        ai_diarization,
         "_analyze_dialogue_batch",
         lambda *_args: {1: "The fare is six dollars."},
     )
@@ -699,7 +704,7 @@ def test_dialogue_analysis_retries_only_missing_cue(monkeypatch):
             return {1: "Hello.\nHi."}
         return {2: "How much?\nFive dollars."}
 
-    monkeypatch.setattr(ai, "_analyze_dialogue_batch", fake_analyze)
+    monkeypatch.setattr(ai_diarization, "_analyze_dialogue_batch", fake_analyze)
     result, report = ai.analyze_dialogue_turns(
         [
             {"id": 1, "start": 0, "end": 1, "text": "Hello. Hi.", "translation": ""},
@@ -752,17 +757,18 @@ def test_dialogue_analysis_calls_openai_compatible_endpoint(monkeypatch):
     server = HTTPServer(("127.0.0.1", 0), DialogueStubHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    monkeypatch.setattr(
-        ai,
-        "settings",
-        replace(
-            ai.settings,
-            llm_base_url=f"http://127.0.0.1:{server.server_port}/v1",
-            llm_api_key="analysis-key",
-            llm_model="dialogue-model",
-            speaker_analysis_model="",
-        ),
+    dialogue_settings = replace(
+        ai_llm.settings,
+        llm_base_url=f"http://127.0.0.1:{server.server_port}/v1",
+        llm_api_key="analysis-key",
+        llm_model="dialogue-model",
+        speaker_analysis_model="",
     )
+    # `_analyze_dialogue_batch` (diarization) picks the model name and
+    # `_llm_completion` (llm) makes the actual request — both read their own
+    # `settings` binding, so both need the override.
+    monkeypatch.setattr(ai_diarization, "settings", dialogue_settings)
+    monkeypatch.setattr(ai_llm, "settings", dialogue_settings)
 
     try:
         result = ai.analyze_dialogue_turns(
@@ -834,12 +840,12 @@ def test_the_llm_rotates_its_keys_and_remembers_which_one_is_cooling(monkeypatch
 
     seen = []
     port, shutdown = _rotating_llm_stub(seen, limited_keys={"key-1"})
-    monkeypatch.setattr(ai, "_llm_pool", None)
+    monkeypatch.setattr(ai_llm, "_llm_pool", None)
     monkeypatch.setattr(
-        ai,
+        ai_llm,
         "settings",
         replace(
-            ai.settings,
+            ai_llm.settings,
             llm_base_url=f"http://127.0.0.1:{port}/v1",
             llm_api_key="[key-1, key-2]",
             llm_model="rotating-model",
@@ -848,9 +854,9 @@ def test_the_llm_rotates_its_keys_and_remembers_which_one_is_cooling(monkeypatch
     message = [{"role": "user", "content": "dịch đi"}]
 
     try:
-        assert ai._llm_completion(message, temperature=0.0, operation=ai.OP_TRANSLATE) == "xong"
-        assert ai._llm_completion(message, temperature=0.0, operation=ai.OP_TRANSLATE) == "xong"
-        assert ai._llm_credentials() is ai._llm_credentials(), "one shared pool"
+        assert ai_llm._llm_completion(message, temperature=0.0, operation=ai_shared.OP_TRANSLATE) == "xong"
+        assert ai_llm._llm_completion(message, temperature=0.0, operation=ai_shared.OP_TRANSLATE) == "xong"
+        assert ai_llm._llm_credentials() is ai_llm._llm_credentials(), "one shared pool"
     finally:
         shutdown()
 
@@ -861,36 +867,36 @@ def test_the_llm_rotates_its_keys_and_remembers_which_one_is_cooling(monkeypatch
 def test_a_job_stops_with_a_readable_error_when_every_key_is_limited(monkeypatch):
     seen = []
     port, shutdown = _rotating_llm_stub(seen, limited_keys={"key-1", "key-2"})
-    monkeypatch.setattr(ai, "_llm_pool", None)
+    monkeypatch.setattr(ai_llm, "_llm_pool", None)
     monkeypatch.setattr(
-        ai,
+        ai_llm,
         "settings",
         replace(
-            ai.settings,
+            ai_llm.settings,
             llm_base_url=f"http://127.0.0.1:{port}/v1",
             llm_api_key="[key-1, key-2]",
             llm_model="rotating-model",
         ),
     )
     monkeypatch.setattr(
-        ai.httpclient,
+        ai_llm.httpclient,
         "settings",
-        replace(ai.httpclient.settings, http_rate_limit_retries=0),
+        replace(ai_llm.httpclient.settings, http_rate_limit_retries=0),
     )
 
     try:
         with pytest.raises(ai.AIProviderError) as error:
-            ai._llm_completion(
+            ai_llm._llm_completion(
                 [{"role": "user", "content": "dịch đi"}],
                 temperature=0.0,
-                operation=ai.OP_TRANSLATE,
+                operation=ai_shared.OP_TRANSLATE,
             )
     finally:
         shutdown()
 
     # The run reports what it was doing, and keeps the HTTP layer's own reason.
     assert error.value.code == "err.ai.llmRequestFailed"
-    assert error.value.params["operation"] is ai.OP_TRANSLATE
+    assert error.value.params["operation"] is ai_shared.OP_TRANSLATE
     assert error.value.params["cause"].code == "err.http.poolExhausted"
     assert error.value.params["cause"].params["keys"] == 2
     assert sorted(seen) == ["key-1", "key-2"], "each key was given its turn"
@@ -900,14 +906,14 @@ def test_llm_calls_are_paced_when_an_interval_is_configured(monkeypatch):
     """Cheapest rate limit is the one never triggered."""
 
     monkeypatch.setattr(
-        ai, "settings", replace(ai.settings, llm_min_interval_seconds=0.05)
+        ai_llm, "settings", replace(ai_llm.settings, llm_min_interval_seconds=0.05)
     )
-    monkeypatch.setattr(ai, "_llm_next_call_at", 0.0)
+    monkeypatch.setattr(ai_llm, "_llm_next_call_at", 0.0)
     slept = []
-    monkeypatch.setattr(ai.time, "sleep", slept.append)
+    monkeypatch.setattr(ai_llm.time, "sleep", slept.append)
 
-    ai._wait_for_llm_slot()  # nothing to wait for yet
-    ai._wait_for_llm_slot()
+    ai_llm._wait_for_llm_slot()  # nothing to wait for yet
+    ai_llm._wait_for_llm_slot()
 
     assert len(slept) == 1, slept
     assert 0.04 <= slept[0] <= 0.06, slept
@@ -915,38 +921,38 @@ def test_llm_calls_are_paced_when_an_interval_is_configured(monkeypatch):
 
 def test_llm_calls_run_flat_out_without_an_interval(monkeypatch):
     monkeypatch.setattr(
-        ai, "settings", replace(ai.settings, llm_min_interval_seconds=0.0)
+        ai_llm, "settings", replace(ai_llm.settings, llm_min_interval_seconds=0.0)
     )
-    monkeypatch.setattr(ai, "_llm_next_call_at", time.monotonic() + 30)
+    monkeypatch.setattr(ai_llm, "_llm_next_call_at", time.monotonic() + 30)
 
     started = time.monotonic()
-    ai._wait_for_llm_slot()
+    ai_llm._wait_for_llm_slot()
 
     assert time.monotonic() - started < 1
 
 
 def test_translation_map_parser_accepts_markdown_fence_and_plain_arrays():
-    assert ai._extract_translation_map(
+    assert ai_translation._extract_translation_map(
         '```json\n{"1": "Một", "2": "Hai"}\n```', [1, 2]
     ) == {1: "Một", 2: "Hai"}
     # A bare array is positional, so it is only trusted at the exact length.
-    assert ai._extract_translation_map('["Một", "Hai"]', [1, 2]) == {1: "Một", 2: "Hai"}
-    assert ai._extract_translation_map('["Một Hai"]', [1, 2]) == {}
+    assert ai_translation._extract_translation_map('["Một", "Hai"]', [1, 2]) == {1: "Một", 2: "Hai"}
+    assert ai_translation._extract_translation_map('["Một Hai"]', [1, 2]) == {}
 
 
 def test_transformer_provider_rejects_wrong_target_language(monkeypatch):
     monkeypatch.setattr(
-        ai,
+        ai_llm,
         "settings",
         replace(
-            ai.settings,
+            ai_llm.settings,
             translation_provider="transformers",
             translation_model="example/model",
             transformers_target_language="Tiếng Việt",
         ),
     )
     try:
-        ai._translate_batch_transformers(["Hello"], "English")
+        ai_llm._translate_batch_transformers(["Hello"], "English")
     except ai.AIProviderError as error:
         assert "Tiếng Việt" in str(error)
     else:
@@ -1008,7 +1014,7 @@ def test_deepgram_joins_fragments_split_across_utterances():
         }
     }
 
-    cues = ai._deepgram_cues(payload, media_duration=200.0)
+    cues = ai_transcription._deepgram_cues(payload, media_duration=200.0)
 
     assert len(cues) == 1
     assert cues[0]["text"] == "看清楚了吧"
@@ -1032,7 +1038,7 @@ def test_deepgram_chinese_cues_are_readable_at_their_own_length():
         }
     }
 
-    cues = ai._deepgram_cues(payload, media_duration=200.0)
+    cues = ai_transcription._deepgram_cues(payload, media_duration=200.0)
 
     assert len(cues) < 8  # the fragments were joined, not passed straight through
     for cue in cues:
@@ -1048,7 +1054,7 @@ def test_deepgram_chinese_cues_are_readable_at_their_own_length():
 def test_deepgram_chinese_cues_carry_no_invented_spaces():
     payload = {"results": {"utterances": [_zh_utterance("不管这香炉怎么滚动", 0.0, 3.0)]}}
 
-    cues = ai._deepgram_cues(payload, media_duration=10.0)
+    cues = ai_transcription._deepgram_cues(payload, media_duration=10.0)
 
     assert " " not in "".join(cue["text"] for cue in cues)
 
@@ -1063,7 +1069,7 @@ def test_deepgram_still_separates_two_speakers_mid_sentence():
         }
     }
 
-    cues = ai._deepgram_cues(payload, media_duration=10.0)
+    cues = ai_transcription._deepgram_cues(payload, media_duration=10.0)
 
     assert [cue["speaker"] for cue in cues] == [0, 1]
 
@@ -1089,7 +1095,7 @@ def test_an_overflowing_group_is_cut_at_the_pause_not_where_the_budget_ends():
         )
         cursor += 0.25
 
-    cues = ai._segment_words_into_cues(words, media_duration=60.0)
+    cues = ai_transcription._segment_words_into_cues(words, media_duration=60.0)
 
     assert len(cues[0]["text"].replace("\n", "")) == 12
     assert cues[0]["end"] == words[11]["end"]

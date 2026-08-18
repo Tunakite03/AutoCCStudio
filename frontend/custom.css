@@ -314,6 +314,13 @@
      user-select: none;
 }
 
+/* Without this, a touch drag on a splitter can be swallowed by the browser's
+   own pan/scroll gesture recognition before the pointermove handler ever
+   fires — preventDefault() on pointerdown fires too late to stop it. */
+.splitter {
+     touch-action: none;
+}
+
 /* Grab area wider than the 5px rail, so the pointer doesn't have to be precise. */
 .splitter::after {
      content: '';
@@ -503,6 +510,14 @@ svg path.solid {
 
 /* ── Timeline lanes ─────────────────────────────────────────── */
 
+/* The ruler/wave/clip lanes are scrubbed (drag-to-seek) by JS, not panned by
+   the browser — scrollLeft is only ever set programmatically. Left at the
+   default `auto`, a touch drag here races the browser's own scroll-gesture
+   detection instead of reliably starting the scrub on first contact. */
+#timeline-scroll {
+     touch-action: none;
+}
+
 .track-head:last-child {
      border-bottom: 0;
      align-items: flex-start;
@@ -559,6 +574,10 @@ svg path.solid {
      background: var(--color-clip-face);
      cursor: grab;
      user-select: none;
+     /* Same reasoning as #timeline-scroll: dragging or trimming a clip is a
+        horizontal gesture inside a horizontally-scrollable ancestor, so touch
+        needs this to commit to the drag instead of scrolling the lane. */
+     touch-action: none;
      transition:
           border-color 110ms ease,
           background 110ms ease,

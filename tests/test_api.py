@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 from fastapi.testclient import TestClient
 
-import backend.ai as ai_module
+import backend.ai.translation as ai_module
 import backend.api.jobs as jobs_api
 import backend.jobs.tasks as tasks_module
 from backend.app import app
