@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 from backend import app as app_module
 from backend.app import app
 
-
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
 

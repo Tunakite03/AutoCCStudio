@@ -11,9 +11,10 @@ from __future__ import annotations
 import re
 import uuid
 
-from ..dubbing import dub_is_stale
-from ..messages import Message
-from ..subtitles import strip_speaker_labels
+from ..core.messages import Message
+from ..domain.dubbing.aligner import dub_is_stale
+from ..domain.subtitles.parser import strip_speaker_labels
+from .types import CueRecord, JobRecord, ProgressRecord
 
 # uuid4().hex — anything else in a path parameter is a probe, not a job.
 JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -50,7 +51,7 @@ def make_progress(
     current: int = 0,
     total: int | None = None,
     message: Message | None = None,
-) -> dict:
+) -> ProgressRecord:
     """A progress report for a phase.
 
     `total` is None while a phase cannot know its own size — Deepgram is one
@@ -76,7 +77,7 @@ def new_job(
     kind: str,
     video_name: str | None = None,
     subtitle_name: str | None = None,
-) -> dict:
+) -> JobRecord:
     """Build a job. Nothing touches disk until the store persists it."""
 
     return {
@@ -119,7 +120,7 @@ def new_job(
     }
 
 
-def clean_cues(cues: list[dict]) -> list[dict]:
+def clean_cues(cues: list[dict]) -> list[CueRecord]:
     """Drop legacy [S1]/[1] prefixes without disturbing dialogue line breaks."""
 
     cleaned_cues = []
@@ -131,7 +132,7 @@ def clean_cues(cues: list[dict]) -> list[dict]:
     return cleaned_cues
 
 
-def public_job(job: dict) -> dict:
+def public_job(job: JobRecord) -> dict:
     """The client-facing projection.
 
     Built field by field on purpose: internal bookkeeping (filesystem paths, the

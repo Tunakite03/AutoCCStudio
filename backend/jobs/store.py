@@ -18,13 +18,15 @@ import json
 import os
 import shutil
 import threading
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import cast
 
-from ..config import get_logger
-from ..messages import CodedError, Message
+from ..core.config import get_logger
+from ..core.messages import CodedError, Message
 from .model import is_valid_job_id, public_job
+from .types import JobRecord
 
 logger = get_logger("jobs.store")
 
@@ -43,7 +45,7 @@ class JobConflict(CodedError):
 class JobStore:
     def __init__(self, runtime_dir: Path):
         self._runtime_dir = runtime_dir
-        self._jobs: dict[str, dict] = {}
+        self._jobs: dict[str, JobRecord] = {}
         self._registry_lock = threading.Lock()
         self._job_locks: dict[str, threading.RLock] = {}
         self._subscribers: dict[str, set[tuple]] = {}
@@ -78,7 +80,7 @@ class JobStore:
 
     # ── Reading ──────────────────────────────────────────────────────
 
-    def _load(self, job_id: str) -> dict:
+    def _load(self, job_id: str) -> JobRecord:
         """Return the live job dict, recovering it from disk when needed.
 
         Callers must hold the job lock.
@@ -93,7 +95,7 @@ class JobStore:
         if not path.exists():
             raise JobNotFound(job_id)
         try:
-            job = json.loads(path.read_text(encoding="utf-8"))
+            job = cast(JobRecord, json.loads(path.read_text(encoding="utf-8")))
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("job %s: metadata unreadable: %s", job_id, exc)
             raise JobNotFound(job_id) from exc
@@ -123,12 +125,15 @@ class JobStore:
         with self._lock_for(job_id):
             return public_job(self._load(job_id))
 
-    def read(self, job_id: str) -> dict:
+    def read(self, job_id: str) -> JobRecord:
         """A deep-ish copy of the raw job for callers that need internal fields."""
 
         with self._lock_for(job_id):
             job = self._load(job_id)
-            return {**job, "cues": [dict(cue) for cue in job.get("cues", [])]}
+            return cast(
+                JobRecord,
+                {**job, "cues": [dict(cue) for cue in job.get("cues", [])]},
+            )
 
     def cancel_requested(self, job_id: str) -> bool:
         """Read the stop flag alone.
@@ -150,7 +155,7 @@ class JobStore:
     # ── Writing ──────────────────────────────────────────────────────
 
     @contextmanager
-    def edit(self, job_id: str, *, persist: bool = True) -> Iterator[dict]:
+    def edit(self, job_id: str, *, persist: bool = True) -> Iterator[JobRecord]:
         """Open a job for mutation; persists and publishes on a clean exit.
 
         Keep the body short — this lock serialises every reader of the job.
@@ -161,7 +166,7 @@ class JobStore:
             yield job
             self._persist(job, persist=persist)
 
-    def create(self, job: dict) -> dict:
+    def create(self, job: JobRecord) -> JobRecord:
         """Register a freshly built job and write it out."""
 
         job_id = job["id"]
@@ -171,7 +176,7 @@ class JobStore:
             self._persist(job)
         return job
 
-    def _persist(self, job: dict, *, persist: bool = True) -> None:
+    def _persist(self, job: JobRecord, *, persist: bool = True) -> None:
         """Bump the revision, optionally write to disk, then notify subscribers.
 
         Callers must hold the job lock. `persist=False` publishes a live update
@@ -242,7 +247,10 @@ class JobStore:
 
     # ── Listing ──────────────────────────────────────────────────────
 
-    def summaries(self, summarise) -> list[dict]:
+    def summaries(
+        self,
+        summarise: Callable[[JobRecord, Path], dict],
+    ) -> list[dict]:
         """Every project on disk, newest first.
 
         Summarising stats every file in every project directory, so results are
@@ -269,7 +277,10 @@ class JobStore:
                 continue
 
             try:
-                job = json.loads(metadata.read_text(encoding="utf-8"))
+                job = cast(
+                    JobRecord,
+                    json.loads(metadata.read_text(encoding="utf-8")),
+                )
             except (OSError, json.JSONDecodeError):
                 continue  # a half-written project should not break the list
             if not job.get("id"):

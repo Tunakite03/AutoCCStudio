@@ -1,4 +1,4 @@
-import backend.translation_style as style
+import backend.domain.translation.style as style
 
 
 def test_auto_picks_the_preset_the_source_language_implies():

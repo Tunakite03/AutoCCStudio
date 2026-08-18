@@ -8,9 +8,10 @@ one side. Everything goes through `post` here instead.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
-from datetime import datetime, timezone
-from typing import Any, Callable, Iterator
+from typing import Any
 
 from .apikeys import CredentialPool
 from .cancellation import raise_if_stopped
@@ -111,8 +112,8 @@ def _retry_after_seconds(response) -> float | None:
         except (TypeError, ValueError):
             continue
         if deadline.tzinfo is None:
-            deadline = deadline.replace(tzinfo=timezone.utc)
-        return max(0.0, (deadline - datetime.now(timezone.utc)).total_seconds())
+            deadline = deadline.replace(tzinfo=UTC)
+        return max(0.0, (deadline - datetime.now(UTC)).total_seconds())
     return None
 
 

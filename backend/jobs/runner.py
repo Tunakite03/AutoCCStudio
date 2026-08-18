@@ -10,13 +10,13 @@ the job as an error the UI can show.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Callable, Iterator
 
-from ..cancellation import OperationCancelled, clear_stop_check, set_stop_check
-from ..config import get_logger
-from ..messages import CodedError, Message, raw
+from ..core.cancellation import OperationCancelled, clear_stop_check, set_stop_check
+from ..core.config import get_logger
+from ..core.messages import CodedError, Message, raw
 from .model import (
     PHASE_QUEUED,
     STATUS_CANCELLED,
@@ -25,6 +25,7 @@ from .model import (
     make_progress,
 )
 from .store import JobNotFound, JobStore
+from .types import JobRecord
 
 logger = get_logger("jobs.runner")
 
@@ -47,13 +48,13 @@ class JobContext:
         self.job_id = job_id
         self.operation = operation
 
-    def read(self) -> dict:
+    def read(self) -> JobRecord:
         """Take a snapshot of the job to work from, unlocked."""
 
         return self.store.read(self.job_id)
 
     @contextmanager
-    def edit(self) -> Iterator[dict]:
+    def edit(self) -> Iterator[JobRecord]:
         """Open the job to write results back. Keep the body short."""
 
         with self.store.edit(self.job_id) as job:
@@ -79,7 +80,7 @@ class JobContext:
         except JobNotFound as exc:
             raise JobCancelled(self.job_id) from exc
 
-    def checkpoint(self, apply: Callable[[dict], None]) -> None:
+    def checkpoint(self, apply: Callable[[JobRecord], None]) -> None:
         """Persist partial results so a later failure does not discard them.
 
         Deliberately does not stop on a cancel request: a worker checkpoints
@@ -223,7 +224,7 @@ def describe_error(exc: Exception) -> dict:
     return Message("err.unexpected", {"type": type(exc).__name__}).as_dict()
 
 
-def finish(job: dict) -> None:
+def finish(job: JobRecord) -> None:
     """Mark a job completed and clear the transient fields.
 
     A stop request that arrives after the last checkpoint is dropped here on

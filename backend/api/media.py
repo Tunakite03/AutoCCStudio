@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 import mimetypes
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
-from ..jobs import store
-from ..media import (
+from ..core.messages import detail
+from ..domain.subtitles.parser import format_subtitle
+from ..infrastructure.media.ffmpeg import (
     FFmpegError,
     NoAudioTrack,
     extract_waveform,
@@ -19,8 +20,7 @@ from ..media import (
     mux_soft_subtitles,
     render_thumbnail,
 )
-from ..messages import detail
-from ..subtitles import format_subtitle
+from ..jobs import store
 
 router = APIRouter(prefix="/api/jobs", tags=["media"])
 

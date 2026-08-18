@@ -7,10 +7,10 @@ import threading
 import time
 from functools import lru_cache
 
-from .. import httpclient
-from ..apikeys import CredentialPool
-from ..config import settings
-from ..messages import Message
+from ..core import httpclient
+from ..core.apikeys import CredentialPool
+from ..core.config import settings
+from ..core.messages import Message
 from .shared import AIProviderError, AIResponseFormatError, logger
 
 

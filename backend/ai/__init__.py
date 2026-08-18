@@ -14,7 +14,7 @@ unchanged.
 
 from __future__ import annotations
 
-from ..config import settings
+from ..core.config import settings
 from .diarization import analyze_dialogue_turns
 from .shared import AIProviderError, AIResponseFormatError
 from .transcription import transcribe_video, transcribe_video_deepgram
@@ -22,6 +22,7 @@ from .translation import (
     TRANSLATION_MOCK,
     TRANSLATION_OPENAI_COMPATIBLE,
     TRANSLATION_TRANSFORMERS,
+    get_translation_settings,
     resolve_translation_provider,
     shorten_for_dubbing,
     translate_cues,
@@ -35,6 +36,7 @@ __all__ = [
     "TRANSLATION_OPENAI_COMPATIBLE",
     "TRANSLATION_TRANSFORMERS",
     "analyze_dialogue_turns",
+    "get_translation_settings",
     "resolve_translation_provider",
     "shorten_for_dubbing",
     "transcribe_video",

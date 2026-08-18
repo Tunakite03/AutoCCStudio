@@ -7,7 +7,7 @@ $cli = Join-Path $PSScriptRoot "tailwindcss.exe"
 # Not $input/$output: $input is a PowerShell automatic variable (the pipeline
 # enumerator) and gets re-bound inside an advanced script's end block, so the
 # path assigned here would never reach the CLI.
-$inputFile = Join-Path $PSScriptRoot "frontend/input.css"
+$inputFile = Join-Path $PSScriptRoot "frontend/styles/input.css"
 $outputFile = Join-Path $PSScriptRoot "frontend/styles.css"
 
 if (-not (Test-Path $cli)) {

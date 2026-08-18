@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 import backend.api.styles as styles_api
 from backend.app import app
-from backend.styles import StyleNotFound, StyleRejected, StyleStore
+from backend.domain.subtitles.styles import StyleNotFound, StyleRejected, StyleStore
 
 client = TestClient(app)
 

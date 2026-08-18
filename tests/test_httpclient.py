@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend import cancellation, httpclient
-from backend.apikeys import CredentialPool
+from backend.core import cancellation, httpclient
+from backend.core.apikeys import CredentialPool
 
 
 def serve(handler_factory):
@@ -160,9 +160,9 @@ def test_a_rate_limit_that_never_clears_says_so(monkeypatch):
 
 
 def test_the_provider_decides_how_long_to_wait(monkeypatch):
-    ask = lambda headers: httpclient._rate_limit_delay(
-        SimpleNamespace(headers=headers), 0
-    )
+    def ask(headers):
+        return httpclient._rate_limit_delay(SimpleNamespace(headers=headers), 0)
+
     assert ask({"Retry-After": "7"}) == 7.0
     assert ask({"ratelimitbysize-reset": "12"}) == 12.0
     # A provider asking for an hour still only blocks the worker for a minute.

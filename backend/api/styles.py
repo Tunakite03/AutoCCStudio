@@ -11,10 +11,10 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..config import RUNTIME_DIR
-from ..messages import detail
-from ..styles import StyleNotFound, StyleRejected, StyleStore, is_valid_style_id
-from ..translation_style import STYLE_AUTO
+from ..core.config import RUNTIME_DIR
+from ..core.messages import detail
+from ..domain.subtitles.styles import StyleNotFound, StyleRejected, StyleStore, is_valid_style_id
+from ..domain.translation.style import STYLE_AUTO
 
 router = APIRouter(prefix="/api/styles", tags=["styles"])
 

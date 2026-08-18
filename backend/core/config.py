@@ -3,8 +3,7 @@ from dataclasses import dataclass
 from os import environ, getenv
 from pathlib import Path
 
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = ROOT_DIR / "frontend"
 RUNTIME_DIR = ROOT_DIR / "runtime"
 

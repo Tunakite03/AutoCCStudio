@@ -25,9 +25,9 @@ import time
 import uuid
 from pathlib import Path
 
-from .config import get_logger
-from .messages import CodedError
-from .translation_style import STYLE_AUTO, STYLE_NOTES_LIMIT, STYLES
+from ...core.config import get_logger
+from ...core.messages import CodedError
+from ..translation.style import STYLE_AUTO, STYLE_NOTES_LIMIT, STYLES
 
 logger = get_logger("styles")
 

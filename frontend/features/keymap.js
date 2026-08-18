@@ -8,7 +8,7 @@ import { state } from "../core/store.js";
 import { addCue, deleteCue, markPoint, mergeCue, splitCue } from "./editing.js";
 import { redo, undo } from "./history.js";
 import { stepCue } from "./cuelist.js";
-import { transcribe } from "./pipeline.js";
+import { transcribe } from "./pipeline/index.js";
 import { openShortcuts } from "./shell.js";
 import { timeline } from "./timeline-view.js";
 import { currentTime, frameStep, seek, togglePlay } from "./transport.js";

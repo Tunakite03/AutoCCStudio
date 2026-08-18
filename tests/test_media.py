@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.media import (
+from backend.infrastructure.media.ffmpeg import (
     FFmpegError,
     NoAudioTrack,
     extract_transcription_audio,
@@ -72,7 +72,7 @@ def test_thumbnail_render_fails_loudly_on_unreadable_media(tmp_path):
 
 # ── Trimming what a synthesiser pads its output with ─────────────────
 
-from backend.media import (  # noqa: E402  (grouped with the dubbing tests it serves)
+from backend.domain.dubbing.audio_dsp import (  # noqa: E402  (grouped with the dubbing tests it serves)
     DUB_SAMPLE_RATE,
     DUB_SILENCE_KEEP_MS,
     trim_silence,
