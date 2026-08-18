@@ -107,7 +107,7 @@ def test_static_cache_seconds_caches_assets_but_never_the_document(monkeypatch):
 
 # ── The timeline canvases ────────────────────────────────────────────
 
-CANVAS_LANE = re.compile(r'<div class="(lane[^"]*)"[^>]*>\s*(?:<!--.*?-->\s*)*<canvas', re.S)
+CANVAS_LANE = re.compile(r'<div\s+class="(lane[^"]*)"[^>]*>\s*(?:<!--.*?-->\s*)*<canvas', re.S)
 
 
 def test_a_lane_holding_a_canvas_never_clips():
