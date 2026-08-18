@@ -2,27 +2,30 @@
 
 [Tiếng Việt](README.md) | **English**
 
-AutoCC is a local-first MVP application for generating, editing, and translating video subtitles:
+AutoCC is a local-first application for generating, editing, translating, and dubbing video subtitles:
 
-- **Import subtitles:** Supports `.srt` and `.vtt` formats.
-- **Speech-to-Text:** Local transcription with `faster-whisper` or cloud-based with Deepgram Nova-3.
-- **Multi-speaker Diarization:** Deepgram audio diarization support; contextual AI intelligently splits speaker turns within cues via newlines without inserting artificial `[S1]`/`[S2]` tags.
-- **LLM Translation:** Cue-by-cue translation via OpenAI-compatible endpoints (`/chat/completions`), allowing seamless integration with Ollama, LM Studio, or cloud AI providers.
-- **Real-time Progress Monitoring:** Track transcription and translation status live via Server-Sent Events (SSE) with automatic heartbeats and reconnection.
-- **NLE-style Video Editor UI:** Video preview with responsive subtitle overlay, interactive draggable timeline with zoomable audio waveforms.
-- **Project Dashboard:** Manage all projects in your workspace with video thumbnails, translation progress bars, disk space usage, search, filtering, and deletion.
-- **Instant Re-transcription:** Reopen past projects and re-run transcription directly on cached server video files without needing to re-upload.
-- **Timeline Editing:** Drag clip body to shift cue timing, drag edges to trim/extend, split/merge cues at playhead, and snap to cue boundaries and playhead.
-- **Smooth Scrubbing:** Dragging or scrubbing the timeline during playback smoothly pauses the video and resumes upon release.
-- **Multi-level History:** Undo / Redo for all cue editing operations; rapid typing bursts are automatically grouped into single history entries.
-- **Reading Speed Warning (CPS):** Visual Characters-Per-Second warnings directly on timeline clips and inspector lists based on 17/21 cps thresholds.
-- **Customizable Layout:** Resizable left/right sidebars and timeline height persisted across sessions, with dark and light theme support.
-- **Dubbing:** Read the translation aloud with TTS, fit every line to its own cue automatically, preview it against the video in the app, and export an MP4 with or without the original audio alongside it.
-- **Export & Muxing:** Export clean SRT/VTT files or mux soft subtitle tracks into MP4 videos using ffmpeg.
+- **Subtitle Import:** Supports `.srt` and `.vtt` formats.
+- **Speech-to-Text (STT):** Local offline transcription via `faster-whisper` or cloud-based via Deepgram Nova-3.
+- **Multi-Speaker Diarization:** Supports acoustic audio diarization from Deepgram; contextual AI analyzes dialogue flow to insert newline breaks for speaker turns within cues without inserting artificial `[S1]`/`[S2]` tags.
+- **AI Translation:** Batch translation via OpenAI-compatible endpoints (`/chat/completions`), allowing seamless connection to Ollama, LM Studio, or hosted cloud APIs.
+- **Translation Styles & Custom Glossaries:** Built-in presets (Sino-Vietnamese / Hán Việt, Korean Drama, Japanese Anime, GenZ / Slang, Formal), pinned glossary terms, and full support for creating and managing custom saved translation styles.
+- **Automated TTS Dubbing:** Synthesize translations using Microsoft Edge Neural TTS or mock voices; 3-tier duration fitting (`retime_pcm` speedup, silence `spill`, and LLM-assisted line shortening); mix voiceovers onto the original video with automated Audio Ducking.
+- **Real-Time Progress Tracking:** Monitor transcription, translation, diarization, and dubbing live via Server-Sent Events (SSE) with automatic reconnection.
+- **Professional NLE Video Editor UI:** Responsive video player with subtitle overlay, smooth interactive draggable timeline with zoomable audio waveforms.
+- **Project Dashboard:** Overview of all projects in your workspace with video thumbnails, duration, translation progress bars, disk usage, search, filtering, and deletion.
+- **Instant Re-transcription:** Reopen past projects and re-run transcription directly on cached server video files without re-uploading.
+- **Flexible Timeline Editing:** Drag clip body to shift cue timing, drag edges to trim/extend, split/merge cues at playhead, and snap to cue boundaries and playhead.
+- **Smooth Playback Scrubbing:** Dragging or scrubbing the timeline during playback smoothly pauses the video and resumes upon release.
+- **Multi-Level Undo / Redo:** Snapshot-based history manager for all editing operations; rapid typing bursts are automatically grouped into single undo steps.
+- **Reading Speed Warning (CPS):** Characters-Per-Second visual alerts directly on timeline clips and inspector based on 17/21 cps thresholds.
+- **Customizable & Multilingual UI:** Sidebar widths and timeline height are persisted across sessions, with dark/light themes and full English / Vietnamese localization.
+- **Export & Muxing:** Export clean SRT/VTT subtitle files or mux soft subtitles and dubbed audio tracks into MP4 video containers using FFmpeg.
+
+---
 
 ## Running on Windows
 
-**Prerequisites:** Python 3.12. The application uses `ffmpeg` from your system `PATH` if available; otherwise, it falls back to the bundled binary from `imageio-ffmpeg` for subtitle muxing.
+**Prerequisites:** Python 3.10+ (Python 3.12 recommended). The application automatically finds `ffmpeg` in your system `PATH`; otherwise, it falls back to the bundled binary from `imageio-ffmpeg`.
 
 ```powershell
 cd E:\Project2025\AutoCC
@@ -32,7 +35,9 @@ Copy-Item .env.example .env
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 
-*Note: On the first run with `faster-whisper`, the model will be downloaded to your local cache. You can choose between `tiny`, `base`, `small`, `medium`, or `large-v3`; `small` is the recommended balance for CPU execution.*
+> **Note:** On the first run with `faster-whisper`, the model will be downloaded to your local cache. You can choose between `tiny`, `base`, `small`, `medium`, or `large-v3`; `small` is the recommended balance for CPU execution.
+
+---
 
 ## Multi-Speaker Diarization with Deepgram
 
@@ -47,36 +52,39 @@ DEEPGRAM_DIARIZE_MODEL=latest
 
 Restart AutoCC. The backend sends video audio to `/v1/listen` with `utterances=true`, `smart_format=true`, and the latest diarizer model. Setting language to "Auto Detect" activates automatic language identification; selecting a specific language locks the model to that language code.
 
-When selecting Deepgram in the UI, the model selector provides `nova-3`, `nova-2`, `nova-2-meeting`, and `nova-2-video`. `nova-3` is best suited for general video and multi-speaker content; Meeting and Video models are specialized for English audio. The selected model applies per-job and is stored in the job's metadata.
+When selecting Deepgram in the UI, the model selector provides `nova-3`, `nova-2`, `nova-2-meeting`, and `nova-2-video`. `nova-3` is best suited for general video and multi-speaker content.
 
-The **AI Speaker Turn Analysis** option runs a two-tier process:
-1. First, the backend uses per-word `speaker` and `speaker_confidence` data from Deepgram to insert newline breaks based on acoustic speaker transitions.
-2. Second, an LLM evaluates conversational context (e.g., question-and-answer flow) to resolve ambiguous boundaries, even when Deepgram merges multiple speakers into a single utterance.
+### Two-Tier AI Speaker Turn Analysis
 
-The model is only permitted to insert newline characters; the backend validates all text and punctuation against the original source and prevents the LLM from removing boundaries established by acoustic diarization. LLM results are indexed by `cue_id`, processed in small batches, and retried individually if missing or invalid. Cues that still fail after retries are kept as-is rather than failing the entire batch, with a partial status shown in the UI.
+1. **Tier 1 (Acoustic Diarization):** The backend uses per-word `speaker` and `speaker_confidence` data from Deepgram to insert newline breaks based on acoustic voice transitions.
+2. **Tier 2 (Contextual LLM):** An LLM evaluates conversational context (e.g., question-and-answer flow, pronouns) to resolve ambiguous boundaries, even when Deepgram merges multiple speakers into a single utterance.
 
-The **Re-analyze Speaker Turns** button re-runs only the LLM analysis phase on the current cues without re-uploading the video or re-calling Deepgram, allowing instant experimentation with different models or prompts without extra transcription cost.
+The model is only permitted to insert newline characters; the backend validates all text and punctuation against the original source to prevent hallucinated changes. The **Re-analyze Speaker Turns** button re-runs only this step on current cues without incurring extra STT costs.
 
-## LLM Translation
+---
 
-By default, the app is configured for Ollama:
+## AI Translation (LLM)
+
+By default, AutoCC connects to a local Ollama instance:
 
 ```powershell
 ollama pull qwen2.5:7b
 ollama serve
 ```
 
-To use a custom endpoint or cloud provider, adjust `.env`:
+If connecting to another LLM endpoint (LM Studio, vLLM, or hosted APIs such as OpenAI, DeepSeek, Mistral), configure your `.env`:
 
 ```dotenv
-LLM_BASE_URL=https://your-endpoint.example/v1
-LLM_API_KEY=your-key
-LLM_MODEL=your-model
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=[key-1, key-2]
+LLM_MODEL=gpt-4o-mini
 # Defaults to LLM_MODEL if left blank
 SPEAKER_ANALYSIS_MODEL=
 ```
 
-You can also use local translation via Transformers for specific language pairs (e.g., English → Vietnamese):
+> **API Key Rotation:** You can supply multiple keys as an array `[key1, key2]`. The system rotates keys in Round-Robin order and automatically applies a 60-second cooldown when a key encounters HTTP 429 (Rate Limit).
+
+You can also run offline translation using dedicated HuggingFace Transformers pipelines (e.g. En $\rightarrow$ Vi):
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-translation-local.txt
@@ -89,42 +97,27 @@ TRANSFORMERS_TARGET_LANGUAGE=Tiếng Việt
 TRANSFORMERS_DEVICE=auto
 ```
 
-*Local models are tailored for specific language pairs; for multilingual workflows or expressive tone preservation, an LLM-compatible provider is recommended.*
+### Contextual Batching & JSON Error Recovery
 
-Each translation batch sends a JSON object indexed by line numbers and receives matching keys in return. Even if a model merges two short lines into one sentence, the batch remains synchronized: missing lines are retried individually, failing only if the retry also errors out. Speaker turn newlines are preserved during translation, and timing is always managed by the backend.
+- **Context Continuity:** Each batch includes 4 preceding lines (including recently generated translations) and 2 upcoming lines as read-only context.
+- **Continuous Glossary:** A character and terminology glossary is continuously accumulated and passed to subsequent batches (capped at 40 entries).
+- **JSON Repair Engine:** Responses from the LLM are mapped strictly by line ID. If the model formats markdown incorrectly or merges lines, the backend isolates and retries the missing line without failing the entire batch.
 
-Because dialogues form continuous narrative arcs, batches are not translated in isolation. Each request includes 4 preceding lines (with their newly generated translations) and 2 subsequent lines as read-only context, alongside speaker tags from diarization to ensure characters maintain consistent tone, persona, and honorifics. The model also outputs an evolving glossary (proper nouns, character relationships, recurring terms) that carries over to subsequent batches (capped at 40 items to prevent prompt bloat). Retried lines receive the exact same context. This involves zero extra API calls—only additional input context tokens.
+### Translation Styles & Custom Styles
 
-### Translation Styles & Custom Rules
+- **Presets:** `Auto by Source Language` (Chinese $\rightarrow$ Sino-Vietnamese / Hán Việt, Korean $\rightarrow$ Oppa/Unnie, Japanese $\rightarrow$ Senpai/-san), `Neutral`, `GenZ / Slang`, `Formal`.
+- **Custom Rules & Pinned Glossary:** Input rules like `大哥 → đại ca` or `陛下 = bệ hạ` to override specific terms.
+- **Custom Style Manager:** Save your custom prompt instructions and glossaries (persisted in `runtime/styles.json`) for reuse in other projects.
 
-A translation can be semantically accurate yet miss the stylistic vibe: for example, `大哥` means "eldest brother", but martial arts / drama audiences expect "big brother / boss". The **Style** selector in the Translation panel lets you choose rule presets:
-- `Auto by source language`: Maps Chinese to Sino-Vietnamese conventions, Korean preserves honorifics (*oppa/unnie/sunbae*), Japanese preserves suffixes (*senpai, -san, -chan*), and others use neutral phrasing.
-- `GenZ / Colloquial` and `Formal` presets for manual styling.
+Default presets are defined in [backend/domain/translation/style.py](backend/domain/translation/style.py).
 
-Each preset includes two components: prompt-injected instructions and a **pinned glossary** initialized from batch 1—the model may add new terms during translation but cannot alter or delete pinned terms.
+---
 
-The **Custom Rules** input field allows personalized overrides (one rule per line):
+## Automated TTS Dubbing
 
-```text
-大哥 → big brother
-Doctor = bác sĩ
-Young informal tone, avoid archaic terms in modern scenes
-```
+After translating subtitles, AutoCC synthesizes speech for each cue, fits the duration, and mixes the audio track over the original video.
 
-Lines containing `→`, `->`, `=>`, or `=` are parsed as pinned glossary terms and **override preset entries**; other lines are treated as direct prompt instructions. To blend styles (e.g. a Chinese drama with modern slang), select the closest preset and write specific overrides in this field. It is limited to 2,000 characters and 40 pinned glossary terms (preset items are truncated before custom user terms). Preferences are saved per project.
-
-Presets are defined in [backend/translation_style.py](backend/translation_style.py)—adding new languages or genres simply requires adding an entry to `STYLES` (and `LANGUAGE_STYLES` for automatic selection).
-
-Hosted providers enforce rate limits (requests per second / tokens per minute). When encountering HTTP 429, the app honors the `Retry-After` header (or applies exponential backoff up to 1 minute) under a dedicated `HTTP_RATE_LIMIT_RETRIES` budget. If rate limits persist, throttle request pacing with `LLM_MIN_INTERVAL_SECONDS` (e.g., `1.1` for Mistral's free tier). Any completed batches are flushed to disk before an error is raised.
-
-## Dubbing
-
-Once a project has translations, AutoCC reads every cue out loud, lays the
-recordings onto one track at their own timestamps, and mixes that over the
-original audio.
-
-The default engine is `edge-tts` — Microsoft's free neural endpoint, already in
-`requirements.txt`. Configure it in `.env`:
+By default, it uses `edge-tts` (Microsoft Neural TTS). Configure in `.env`:
 
 ```dotenv
 TTS_PROVIDER=edge
@@ -132,61 +125,21 @@ TTS_VOICE=vi-VN-HoaiMyNeural
 DUB_ORIGINAL_GAIN=0.25
 ```
 
-The Vietnamese voices are `vi-VN-HoaiMyNeural` (female) and
-`vi-VN-NamMinhNeural` (male). `edge-tts --list-voices` lists everything the
-provider offers.
+High-quality Vietnamese voices: `vi-VN-HoaiMyNeural` (Female) and `vi-VN-NamMinhNeural` (Male).
 
-### Fitting a line to its cue
+### 3-Tier Duration Fitting Algorithm
 
-A translated line almost never takes exactly as long to say as the cue it belongs
-to. Three strategies handle it, each tried only when the one before it was not
-enough:
+1. **Speedup (`retime_pcm`):** Increases speech rate up to `DUB_MAX_SPEEDUP` (default `1.25x`) while preserving pitch.
+2. **Spill into Silence (`spill`):** Allows speech to extend into subsequent silence up to `DUB_MAX_SPILL_SECONDS` (default `1.2s`).
+3. **LLM Shortening (`shorten_with_llm`):** Prompts the LLM to rewrite lengthy lines concisely within the allowed character budget (can be disabled via `DUB_SHORTEN_WITH_LLM=false`).
 
-1. **Speed it up** — `atempo` up to `DUB_MAX_SPEEDUP` (1.25 by default). The
-   cheapest fix, and the only one that keeps the sync exact.
-2. **Let it spill** — run past the cue by at most `DUB_MAX_SPILL_SECONDS` into the
-   silence that follows, keeping a guard before the next cue.
-3. **Ask the LLM for fewer words** — a line neither trick can save is rewritten into
-   a character budget and recorded again. This is the only step that costs provider
-   calls, so `DUB_SHORTEN_WITH_LLM=false` turns it off; a line then simply gets read
-   as fast as the speed limit allows.
+### Stale Dub Detection (`dub_stale`)
 
-`DUB_PREFER` decides which of the first two goes first. `speed` (the default) holds
-the dub against the subtitles and speeds a line up even when there is silence behind
-it; `natural` spends that silence first and only speeds up what still will not fit —
-a better delivery, at the cost of picture and sound drifting further apart. On a
-20-line sample, `speed` sped 8 lines up and spilled none.
+During dubbing, a SHA-256 fingerprint (`dubbing_fingerprint`) of all cue texts and timings is saved. If you edit subtitles later, the UI displays a warning that the existing voiceover is stale.
 
-`prefer` can also be sent with the dub request, so both can be compared on the same
-project without restarting the server:
+---
 
-```bash
-curl -X POST "http://127.0.0.1:8000/api/jobs/<job-id>/dub"   -H "Content-Type: application/json" -d '{"prefer":"natural"}'
-```
-
-### When the subtitles change after a dub
-
-Every run records a fingerprint of exactly what it voiced — the words and the timings
-of each cue that had something to say. Edit a translation or move a cue afterwards and
-`dub_stale` turns `true`: the panel says so, and exporting a dubbed MP4 asks for
-confirmation first. The recording is neither deleted nor blocked — it is out of date,
-not broken — but it can no longer be shipped by accident.
-
-Every run reports how many lines ended up in each category, and how many were still
-too long after all three.
-
-### Cache and export
-
-Each voiced line is cached under `runtime/<job>/dub/`, keyed by
-provider + voice + text. Editing one cue and dubbing again costs that one line;
-so does stopping a run and picking it up later. Deleting a project deletes the
-cache with it.
-
-Play the result back from the dubbing panel — the video mutes itself and follows
-along. **Export dubbed MP4** writes the dub as the default audio track; tick *Keep
-the original audio as a second track* to ship both and let the viewer choose.
-
-## Quick Verification
+## Testing & Quality Checks
 
 ```powershell
 py -3.12 -m pip install -r requirements.txt
@@ -194,9 +147,11 @@ py -3.12 -m pytest
 py -3.12 -m compileall backend
 ```
 
-## Frontend Development (Tailwind CSS)
+---
 
-The frontend uses Tailwind CSS v4 via a standalone `tailwindcss.exe` binary (no Node.js/npm required):
+## Frontend Development (Tailwind CSS v4)
+
+The frontend uses standalone Tailwind CSS v4 binary (no Node.js/npm required):
 
 - **Watch mode (Development):**
   ```powershell
@@ -206,110 +161,115 @@ The frontend uses Tailwind CSS v4 via a standalone `tailwindcss.exe` binary (no 
   ```powershell
   .\build-css.ps1
   ```
-- Source file: `frontend/input.css` (contains `@import "tailwindcss";` and `@import "./custom.css";`).
-- Output file: `frontend/styles.css` (loaded directly by the browser).
+- Source file: `frontend/styles/input.css` (contains `@import "tailwindcss";` and `@import "./custom.css";`).
+- Output file: `frontend/styles.css` (loaded directly by `frontend/index.html`).
 
-## MVP Architecture
+---
+
+## System Architecture
+
+For a deep dive into backend architecture, see [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md).
 
 ```text
-frontend/index.html            3-pane shell: inspector · stage + timeline · cue list
-frontend/app.js                entry point: sequentially mounts feature modules
-frontend/core/store.js         document state + event bus (job:loaded, cues:changed, cue:patched…)
-frontend/core/router.js        screen navigation via data-screen + URL hash
-frontend/core/api.js           all backend API calls, single point of URL definitions
-frontend/core/dom.js           $, element(), pointer capture utilities
-frontend/core/feedback.js      toasts, status bar, save state indicator
-frontend/core/format.js        timecode, reading speed (CPS), formatting helpers
-frontend/features/transport.js player, playhead, subtitle overlay, play-while-scrubbing
-frontend/features/timeline-view.js connects timeline engine to application state
-frontend/features/cuelist.js   cue list view + selected cue state ownership
-frontend/features/inspector.js timecode inputs, cue text editor, CPS meter
-frontend/features/editing.js   add / split / merge / delete / shift cue timings
-frontend/features/history.js   snapshot-based undo / redo manager
-frontend/features/jobs.js      job lifecycle, SSE listeners, auto-save
-frontend/features/dashboard.js Projects screen: metrics, project grid, search/filter/delete
-frontend/features/pipeline.js  sidebar: media sources, capabilities, AI execution, file export
-frontend/features/shell.js     layout splitters, light/dark theme, full-window file drop
-frontend/features/keymap.js    central keyboard shortcuts handler
-frontend/lib/timeline-engine.js canvas ruler, audio waveform, draggable clips, playhead, zoom
-backend/app.py                 assembly: middleware, domain-to-HTTP error mapping, routers + static files
-backend/config.py              settings from .env + logger configuration (`autocc.*`)
-backend/httpclient.py          unified outgoing HTTP client with retry/backoff for transient errors
-backend/api/system.py          /api/health, /api/capabilities
-backend/api/jobs.py            job lifecycle: creation, cue updates, export, background tasks, SSE
-backend/api/media.py           video streaming (HTTP Range), thumbnails, waveforms, subtitle muxing
-backend/jobs/model.py          job data models, status definitions, client projections
-backend/jobs/store.py          job state manager: concurrency locks, atomic writes, change listeners
-backend/jobs/runner.py         bounded worker pool + JobContext (progress, checkpoints)
-backend/jobs/tasks.py          background tasks: transcription, speaker turn analysis, translation
-backend/media.py               ffmpeg commands execution + media probe
-backend/subtitles.py           SRT & VTT parsers and formatters
-backend/ai.py                  adapters for faster-whisper, Deepgram, and OpenAI-compatible LLMs
-backend/tts.py                 speech synthesis adapters (edge-tts, plus a mock voice for tests)
-backend/dubbing.py             fitting lines to cues, the segment cache, and track assembly
-runtime/<job-id>/              video, subtitles, waveform.json, and temporary job metadata
+frontend/
+├── index.html                     # 3-pane shell: Inspector · Stage + Timeline · Cue list
+├── app.js                         # Entry point: Initializes i18n & mounts feature modules
+├── core/                          # Frontend core foundation
+│   ├── api.js                     # Centralized HTTP/SSE calls to backend
+│   ├── confirm.js                 # Interactive confirmation modal
+│   ├── dom.js                     # $, element(), pointer capture utilities
+│   ├── feedback.js                # Toasts, status bar, save state indicator
+│   ├── format.js                  # Timecode, reading speed CPS, text formatters
+│   ├── i18n.js                    # UI language manager (vi/en)
+│   ├── icons.js                   # SVG icons template registry
+│   ├── router.js                  # Screen navigation (data-screen + URL hash)
+│   └── store.js                   # Central document state + Event Bus
+├── features/                      # Independent feature modules
+│   ├── cuelist.js                 # Cue list view + selected cue state ownership
+│   ├── dashboard.js               # Projects screen: project grid, search, filter, delete, metrics
+│   ├── editing.js                 # Add / split / merge / delete / shift cue timings
+│   ├── history.js                 # Snapshot-based undo / redo manager
+│   ├── inspector.js               # Timecode inputs, source text, translation editor, CPS meter
+│   ├── jobs.js                    # Job lifecycle, SSE listeners, auto-save mechanism
+│   ├── keymap.js                  # Central keyboard shortcuts handler
+│   ├── shell.js                   # Layout splitters, light/dark theme, full-window file drop
+│   ├── timeline-view.js           # Connects Canvas Timeline Engine to Application State
+│   ├── transport.js               # Video player, playhead, subtitle overlay, playback controls
+│   └── pipeline/                  # AI Pipeline sidebar
+│       ├── index.js               # Tab dispatcher and container
+│       ├── transcribe.js          # Speech-to-Text (Whisper/Deepgram) & Diarization
+│       ├── translate.js           # AI Translation, style selector & glossary pinning
+│       ├── dubbing.js             # TTS Dubbing, audio ducking & preview player
+│       ├── presets.js             # Custom Translation Styles CRUD manager
+│       └── export.js              # Export SRT/VTT and MP4 video muxing
+├── i18n/                          # Localization dictionaries (vi.js, en.js)
+├── lib/
+│   └── timeline-engine.js         # Canvas Timeline Engine: ruler, waveform, draggable clips, playhead, zoom
+└── styles/
+    ├── input.css                  # Tailwind CSS v4 source entry
+    └── custom.css                 # Custom scrollbar, animations, and CSS design tokens
+
+backend/
+├── app.py                         # FastAPI setup: SelectiveGZipMiddleware, CORS, exception mapping, static files
+├── core/                          # Shared infrastructure (apikeys, cancellation, config, httpclient, messages)
+├── domain/                        # Pure Python business algorithms
+│   ├── subtitles/                 # parser.py (SRT/VTT/CJK), layout.py, styles.py (StyleStore JSON)
+│   ├── dubbing/                   # aligner.py (3-tier fit_segment, fingerprint), audio_dsp.py (pure PCM)
+│   └── translation/               # style.py (Style presets, glossary parser, StyleBrief)
+├── infrastructure/                # External tools & provider adapters
+│   ├── media/ffmpeg.py            # Robust wrapper for FFmpeg / FFprobe subprocesses
+│   └── providers/                 # Transcription, Translation, and TTS Provider Protocols & Registry
+├── ai/                            # AI Pipeline engines
+│   ├── transcription.py           # Faster-Whisper local (CUDA/CPU) + Deepgram cloud
+│   ├── translation.py             # Batching, Context injection, JSON repair, Shortening for dubbing
+│   ├── diarization.py             # Contextual dialogue speaker turn analysis
+│   ├── llm.py                     # OpenAI-compatible chat completions client + Transformers local
+│   ├── tts.py                     # EdgeTTS synthesis orchestrator
+│   └── shared.py                  # AI custom errors & progress types
+├── api/                           # HTTP Routers & Endpoints
+│   ├── jobs.py                    # Main facade router /api/jobs
+│   ├── job_lifecycle.py           # Upload, Create, List, Delete, Cues Edit, Download
+│   ├── job_operations.py          # Translate, Dub, Analyze Speakers
+│   ├── job_events.py              # Server-Sent Events stream endpoint (/api/jobs/{id}/events)
+│   ├── job_schemas.py             # Pydantic schemas (CueModel, CuesPayload, DubPayload, TranslatePayload)
+│   ├── job_shared.py              # Helpers: claim lock context, save upload, engine resolvers
+│   ├── media.py                   # Stream video (HTTP 206 Partial Content), Waveform, Thumbnail, Muxing
+│   ├── styles.py                  # CRUD Custom Translation Styles (/api/styles)
+│   └── system.py                  # /api/health, /api/capabilities
+├── jobs/                          # State Management & Background Workers
+│   ├── model.py                   # Job structure, Status, Phase, make_progress, clean_cues, public_job
+│   ├── store.py                   # JobStore: Thread-safe repository, RLock per-job, atomic JSON persistence
+│   ├── runner.py                  # JobRunner: Dedicated ThreadPoolExecutor pool, JobContext, cancellation
+│   └── tasks.py                   # 4 Background workflows: transcription, speaker analysis, translation, dubbing
+├── runtime/
+│   ├── <job_id>/                  # Isolated project data: job.json, video, audio, waveform, dub cache
+│   └── styles.json                # User Custom Translation Styles database
 ```
 
-Three core design principles ensure the backend remains clean and maintainable:
-
-1. **No mutation outside `store.edit(job_id)`.** Prevents race conditions where background workers and HTTP handlers overwrite each other or save out-of-order revisions.
-2. **Minimal lock duration.** Workers read data, execute long-running AI processes *without holding locks*, and only acquire locks when writing results. `GET /api/jobs/{id}` requests never block on transcriptions.
-3. **Lower layers are HTTP-agnostic.** `store` and `jobs/` raise domain errors (`JobNotFound`, `JobConflict`), which `app.py` translates to appropriate HTTP status codes (404, 409).
-
-Background tasks run in a bounded worker pool (`MAX_CONCURRENT_JOBS`). Queued jobs wait instead of competing for CPU, and all failures transition the job to `status=error` with complete tracebacks logged.
-
-The frontend is built using standard ES modules without a bundling step. Core rule: **modules never call render functions of other modules**—they modify state and `emit` events. Each module manages only its own DOM subtree and control states. Adding a new screen (such as the Project Dashboard) is done by creating a new feature module and mounting it in `app.js`.
-
-### Key Endpoints
-
-- `POST /api/jobs/{id}/transcribe` — Re-transcribe using the cached video in `runtime/<job-id>/` (supports `provider`, `model`, `source_language`, `analyze_speakers`). Prompts for user confirmation as existing cues will be replaced.
-
-**Dashboard Endpoints:**
-- `GET /api/jobs` — Overview of all projects in `runtime/` (cue count, duration, translation progress, disk size, last modified timestamp), without cue bodies.
-- `DELETE /api/jobs/{id}` — Permanently removes the project directory from disk.
-- `GET /api/jobs/{id}/thumbnail` — Extracts a video frame at the 10% timestamp cached at `runtime/<job-id>/thumb.jpg`.
-
-**Timeline Endpoints:**
-- `GET /api/jobs/{id}/video` — Streams video with HTTP Range support for smooth seeking.
-- `GET /api/jobs/{id}/waveform` — Decodes audio into 20 amplitude peaks/sec cached at `runtime/<job-id>/waveform.json`.
-
-### Real-Time Job Progress via SSE
-
-Every job snapshot includes a `progress` field (`null` when idle):
-
-```json
-{ "phase": "translating", "current": 40, "total": 60, "ratio": 0.6667, "message": "Translated 40/60 lines" }
-```
-
-`phase` is one of `queued`, `transcribing`, `analyzing`, or `translating`. `total` is `null` when a stage cannot predict its total workload upfront (e.g. Deepgram cloud API reports progress messages, whereas `faster-whisper` reports progress along timeline timestamps).
-
-Progress updates are broadcasted via SSE without writing to disk on every tick. For translations, each completed batch is immediately flushed to disk so that failures late in the process do not forfeit earlier progress.
+---
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
-| --- | --- |
-| `Space` | Play / Pause |
+| :--- | :--- |
+| `Space` | Play / Pause video |
 | `←` `→` | Step backward / forward 1 frame (hold `Shift` for 1-second jump) |
 | `Ctrl ←` `Ctrl →` | Jump to previous / next cue |
-| `Ctrl Z` · `Ctrl Y` | Undo · Redo (browser undo takes precedence inside text inputs) |
+| `Ctrl Z` · `Ctrl Y` | Undo · Redo |
 | `A` · `S` · `G` · `Delete` | Add · Split · Merge · Delete cue |
 | `I` · `O` | Set In / Out point at current playhead position |
 | `N` · `F` · `+` `−` | Toggle Snapping · Fit timeline to view · Zoom in / out |
-| `Ctrl ↵` | Run AI transcription |
-| `F1` | Show keyboard shortcuts reference |
+| `Ctrl ↵` | Trigger AI transcription |
+| `F1` | Show keyboard shortcuts cheat sheet |
 
-## Current Limitations
+---
 
-- **Local Storage:** Job state is saved in local directory structures; multi-user accounts and database storage are not yet implemented.
-- **Authentication:** No API authentication layer. The server binds to `127.0.0.1` and restricts CORS to localhost; do not expose to public networks without an authentication proxy.
-- **Video Export:** "Mux into video" creates a soft subtitle track inside the MP4 container; burned-in / hardcoded subtitles are not yet supported.
-- **Synchronous Video Muxing:** Video subtitle muxing is currently handled synchronously via HTTP response streaming rather than as a background job.
-- **Sequential LLM Turn Analysis:** Speaker turn analysis runs sequentially in batches, which may take time on lengthy transcripts. Progress is displayed, but cancellation midway is not yet supported.
-- **LLM Availability:** AI translation requires an active LLM endpoint (local or remote).
-- **Deepgram Cloud Dependency:** Deepgram transcription requires an active internet connection, an API key, and uploads audio data to their servers.
+## Deployment
+
+The project supports automated CI/CD deployment on pushes to `main`: running test suites, building Docker images, pushing to GitHub Packages (GHCR), and deploying to a virtual machine (VM). See [DEPLOY.md](DEPLOY.md) for details.
+
+---
 
 ## License
 
-This project is licensed under the terms of the [MIT License](LICENSE).
-
+This project is licensed under the terms of the open-source [MIT License](LICENSE).
