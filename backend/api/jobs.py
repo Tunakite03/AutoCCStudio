@@ -45,6 +45,7 @@ from ..subtitles import (
     parse_subtitle,
     split_long_cues,
 )
+from ..styles import is_valid_style_id
 from ..translation_style import STYLE_AUTO, STYLE_NOTES_LIMIT, STYLES
 from ..tts import (
     TTSProviderError,
@@ -74,6 +75,10 @@ class TranslatePayload(BaseModel):
     target_language: str
     style: str = STYLE_AUTO
     style_notes: str = ""
+    # Which saved style the two fields above came from, when they came from one.
+    # It names the shortcut, never the rules: translation reads `style` and
+    # `style_notes`, so a style deleted since is a forgotten name, not a failure.
+    style_ref: str = ""
     provider: str = ""
     model: str = ""
     # 0-based; cues before it keep the translation they already have. 0 is both
@@ -448,6 +453,9 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
     style = payload.style.strip().lower() or STYLE_AUTO
     if style != STYLE_AUTO and style not in STYLES:
         raise HTTPException(status_code=400, detail=detail("err.translation.badStyle"))
+    style_ref = payload.style_ref.strip()
+    if not is_valid_style_id(style_ref):
+        style_ref = ""
 
     resolved_provider, selected_model = _resolve_translation_engine(
         payload.provider, payload.model
@@ -471,6 +479,7 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
         job["translation_model"] = selected_model
         job["translation_style"] = style
         job["translation_style_notes"] = style_notes
+        job["translation_style_ref"] = style_ref
         source_language = job.get("detected_language") or job.get("source_language")
         snapshot = public_job(job)
 

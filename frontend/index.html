@@ -1,1135 +1,2312 @@
 <!doctype html>
 <html lang="vi" data-theme="dark">
-<!-- lang is replaced at boot by core/i18n.js; this is the pre-script default. -->
+  <!-- lang is replaced at boot by core/i18n.js; this is the pre-script default. -->
 
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0d0e10" />
-  <title>AutoCC Studio</title>
-  <link rel="icon"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23141518'/%3E%3Crect x='12' y='18' width='40' height='28' rx='6' fill='none' stroke='%23f0b429' stroke-width='4'/%3E%3Cpath d='M21 30h9M21 37h16' stroke='%23f0b429' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="/styles.css" />
-  <script type="module" src="/app.js"></script>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d0e10" />
+    <title>AutoCC Studio</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23141518'/%3E%3Crect x='12' y='18' width='40' height='28' rx='6' fill='none' stroke='%23f0b429' stroke-width='4'/%3E%3Cpath d='M21 30h9M21 37h16' stroke='%23f0b429' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
 
-  <!-- app.js imports features, features import core: without these the browser
+    <!-- app.js imports features, features import core: without these the browser
        discovers the graph one level at a time and pays three round trips before
        the last module arrives. Preloading flattens that into one wave.
        tests/test_frontend_assets.py fails if a module here is missing. -->
-  <link rel="modulepreload" href="/core/api.js" />
-  <link rel="modulepreload" href="/core/confirm.js" />
-  <link rel="modulepreload" href="/core/dom.js" />
-  <link rel="modulepreload" href="/core/feedback.js" />
-  <link rel="modulepreload" href="/core/format.js" />
-  <link rel="modulepreload" href="/core/i18n.js" />
-  <link rel="modulepreload" href="/core/router.js" />
-  <link rel="modulepreload" href="/core/store.js" />
-  <link rel="modulepreload" href="/i18n/en.js" />
-  <link rel="modulepreload" href="/i18n/vi.js" />
-  <link rel="modulepreload" href="/features/cuelist.js" />
-  <link rel="modulepreload" href="/features/dashboard.js" />
-  <link rel="modulepreload" href="/features/editing.js" />
-  <link rel="modulepreload" href="/features/history.js" />
-  <link rel="modulepreload" href="/features/inspector.js" />
-  <link rel="modulepreload" href="/features/jobs.js" />
-  <link rel="modulepreload" href="/features/keymap.js" />
-  <link rel="modulepreload" href="/features/pipeline.js" />
-  <link rel="modulepreload" href="/features/shell.js" />
-  <link rel="modulepreload" href="/features/timeline-view.js" />
-  <link rel="modulepreload" href="/features/transport.js" />
-  <link rel="modulepreload" href="/lib/timeline-engine.js" />
-</head>
+    <link rel="modulepreload" href="/core/api.js" />
+    <link rel="modulepreload" href="/core/confirm.js" />
+    <link rel="modulepreload" href="/core/dom.js" />
+    <link rel="modulepreload" href="/core/feedback.js" />
+    <link rel="modulepreload" href="/core/format.js" />
+    <link rel="modulepreload" href="/core/i18n.js" />
+    <link rel="modulepreload" href="/core/router.js" />
+    <link rel="modulepreload" href="/core/store.js" />
+    <link rel="modulepreload" href="/i18n/en.js" />
+    <link rel="modulepreload" href="/i18n/vi.js" />
+    <link rel="modulepreload" href="/features/cuelist.js" />
+    <link rel="modulepreload" href="/features/dashboard.js" />
+    <link rel="modulepreload" href="/features/editing.js" />
+    <link rel="modulepreload" href="/features/history.js" />
+    <link rel="modulepreload" href="/features/inspector.js" />
+    <link rel="modulepreload" href="/features/jobs.js" />
+    <link rel="modulepreload" href="/features/keymap.js" />
+    <link rel="modulepreload" href="/features/pipeline.js" />
+    <link rel="modulepreload" href="/features/shell.js" />
+    <link rel="modulepreload" href="/features/timeline-view.js" />
+    <link rel="modulepreload" href="/features/transport.js" />
+    <link rel="modulepreload" href="/lib/timeline-engine.js" />
+  </head>
 
-<body>
-  <div class="app h-full grid grid-rows-[var(--h-titlebar)_minmax(0,1fr)_var(--h-status)] bg-ground">
-    <!-- ── Title bar ─────────────────────────────────────────────── -->
-    <header class="flex items-center gap-4 pl-3 pr-2.5 border-b border-line-soft bg-panel">
-      <div class="flex items-center gap-2 flex-none">
-        <span class="w-6 h-6 grid place-items-center rounded-sm text-accent bg-accent-wash" aria-hidden="true">
-          <svg class="w-4 h-4" viewBox="0 0 24 24">
-            <rect x="3" y="6" width="18" height="12" rx="3" />
-            <path d="M7 11h4M7 14.5h8" />
-          </svg>
-        </span>
-        <span class="text-[13px] font-[650] tracking-[-0.01em]">AutoCC<em
-            class="ml-1 text-muted not-italic font-normal">Studio</em></span>
-      </div>
-
-      <nav class="flex gap-0.5 p-0.5 flex-none border border-line rounded-sm bg-raised"
-        data-i18n-attr="aria-label:nav.screens" aria-label="Màn hình">
-        <button type="button"
-          class="nav-tab flex items-center gap-1.5 h-5.5 px-2.25 max-tight:px-2 rounded-[3px] text-muted text-[11.5px] transition-[color,background-color] duration-120 hover:text-text"
-          data-goto="projects">
-          <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24">
-            <rect x="3.5" y="4.5" width="7" height="7" rx="2" />
-            <rect x="13.5" y="4.5" width="7" height="7" rx="2" />
-            <rect x="3.5" y="14.5" width="7" height="5" rx="2" />
-            <rect x="13.5" y="14.5" width="7" height="5" rx="2" />
-          </svg>
-          <span class="max-tight:hidden" data-i18n="nav.projects">Dự án</span>
-        </button>
-        <button type="button"
-          class="nav-tab flex items-center gap-1.5 h-5.5 px-2.25 max-tight:px-2 rounded-[3px] text-muted text-[11.5px] transition-[color,background-color] duration-120 hover:text-text"
-          data-goto="editor">
-          <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24">
-            <rect x="3" y="6" width="18" height="12" rx="3" />
-            <path d="M7 11h4M7 14.5h8" />
-          </svg>
-          <span class="max-tight:hidden" data-i18n="nav.editor">Biên tập</span>
-        </button>
-      </nav>
-
-      <div class="min-w-0 flex items-center gap-2.5 flex-auto pl-3 border-l border-line-soft">
-        <span
-          class="mono flex-none px-1.5 py-0.5 border border-line rounded-[4px] text-muted text-[10px] tracking-[0.08em]"
-          data-i18n="project.kindEmpty" id="project-kind">TRỐNG</span>
-        <span class="min-w-0 overflow-hidden text-text-dim text-[12.5px] text-ellipsis whitespace-nowrap"
-          data-i18n="project.none" id="project-name">Chưa mở project</span>
-        <span class="project-save mono flex-none text-faint text-[11px]" id="save-state" aria-live="polite">—</span>
-      </div>
-
-      <div class="flex items-center gap-1.5 flex-none">
-        <div
-          class="engine-chip flex items-center gap-1.75 max-w-65 max-tight:max-w-37.5 px-2.25 py-0.75 border border-line rounded-full bg-raised text-text-dim text-[11px]"
-          id="engine-chip" data-i18n-attr="title:engine.chipTitle" title="Provider nhận dạng đang dùng">
-          <span class="engine-led w-1.5 h-1.5 flex-none rounded-full bg-ok" aria-hidden="true"></span>
-          <span class="mono overflow-hidden text-ellipsis whitespace-nowrap" data-i18n="engine.detecting" id="engine-label">Đang dò engine…</span>
+  <body>
+    <div
+      class="app h-full grid grid-rows-[var(--h-titlebar)_minmax(0,1fr)_var(--h-status)] bg-ground"
+    >
+      <!-- ── Title bar ─────────────────────────────────────────────── -->
+      <header
+        class="flex items-center gap-4 pl-3 pr-2.5 border-b border-line-soft bg-panel"
+      >
+        <div class="flex items-center gap-2 flex-none">
+          <span
+            class="w-6 h-6 grid place-items-center rounded-sm text-accent bg-accent-wash"
+            aria-hidden="true"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <rect x="3" y="6" width="18" height="12" rx="3" />
+              <path d="M7 11h4M7 14.5h8" />
+            </svg>
+          </span>
+          <span class="text-[13px] font-[650] tracking-[-0.01em]"
+            >AutoCC<em class="ml-1 text-muted not-italic font-normal"
+              >Studio</em
+            ></span
+          >
         </div>
-        <button
-          class="flex items-center gap-1.5 h-6.5 px-2.25 border border-transparent rounded-sm text-muted text-[11.5px] transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised hover:border-line"
-          id="shortcuts-btn" type="button" data-i18n-attr="title:shortcuts.buttonTitle" title="Phím tắt (F1)">
-          <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-            <rect x="2.5" y="6" width="19" height="12" rx="3" />
-            <path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" />
-          </svg>
-          <span data-i18n="shortcuts.button">Phím tắt</span>
-        </button>
-        <!-- The interface language. Nothing to do with the subtitle's target
-             language, which lives in the translation section. -->
-        <label class="flex items-center" for="ui-locale">
-          <span class="sr-only" data-i18n="locale.label">Ngôn ngữ giao diện</span>
-          <select
-            class="h-6.5 pl-2 pr-1.5 border border-transparent rounded-sm bg-transparent text-muted text-[11.5px] outline-none transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised hover:border-line focus-visible:border-accent"
-            id="ui-locale"></select>
-        </label>
-        <button
-          class="w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-muted transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised hover:border-line"
-          id="theme-btn" type="button" data-i18n-attr="title:theme.toggle;aria-label:theme.toggle" title="Đổi giao diện sáng/tối" aria-label="Đổi giao diện sáng/tối">
-          <svg class="icon-moon w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
-          </svg>
-          <svg class="icon-sun w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="4.2" />
-            <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
-          </svg>
-        </button>
-      </div>
-    </header>
 
-    <!-- ── Work area ─────────────────────────────────────────────── -->
-    <div class="screens relative min-h-0">
-      <!-- ── Screen: editor ────────────────────────────────────────── -->
-      <div
-        class="workbench screen absolute inset-0 min-h-0 grid grid-cols-[var(--w-left)_5px_minmax(320px,1fr)_5px_var(--w-right)] max-tight:grid-cols-[var(--w-left)_5px_minmax(260px,1fr)_5px_var(--w-right)] max-stack:grid-cols-[minmax(0,1fr)] max-stack:grid-rows-[auto_auto_auto] max-stack:overflow-y-auto"
-        id="workbench" data-screen="editor">
-        <!-- Left: setup inspector -->
-        <aside class="min-w-0 min-h-0 flex flex-col bg-panel max-stack:border-t max-stack:border-line-soft"
-          id="pane-left" data-i18n-attr="aria-label:pane.setup" aria-label="Thiết lập project">
-          <div class="min-h-0 flex-1 overflow-y-auto max-stack:overflow-visible p-3.5 pb-8 flex flex-col gap-4.5">
-            <section class="flex flex-col gap-2">
-              <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase" data-i18n="section.source">Nguồn</h2>
-
-              <label
-                class="dropzone relative grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 p-2.5 border border-dashed border-line rounded-md bg-raised cursor-pointer transition-[border-color,background-color] duration-130 hover:border-accent-line hover:bg-raised-hi focus-within:border-accent-line focus-within:bg-raised-hi"
-                for="video-file" id="video-drop">
-                <span class="dropzone-icon w-7.5 h-7.5 grid place-items-center rounded-sm text-muted bg-panel"
-                  aria-hidden="true">
-                  <svg class="w-4.25 h-4.25" viewBox="0 0 24 24">
-                    <path
-                      d="M4 7.5A2.5 2.5 0 0 1 6.5 5h7A2.5 2.5 0 0 1 16 7.5v9A2.5 2.5 0 0 1 13.5 19h-7A2.5 2.5 0 0 1 4 16.5Z" />
-                    <path d="m16 10.5 4-2.4v7.8l-4-2.4Z" />
-                  </svg>
-                </span>
-                <span class="min-w-0">
-                  <strong class="block text-[12.5px] font-semibold" data-i18n="source.video">Video</strong>
-                  <small class="block mt-0.5 overflow-hidden text-muted text-[11px] text-ellipsis whitespace-nowrap"
-                    data-i18n="source.videoHint" id="video-name">Kéo thả hoặc bấm chọn · MP4, MOV, MKV</small>
-                </span>
-                <input class="absolute w-px h-px opacity-0" id="video-file" type="file" accept="video/*,.mkv" />
-              </label>
-
-              <label
-                class="dropzone relative grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 p-2.5 border border-dashed border-line rounded-md bg-raised cursor-pointer transition-[border-color,background-color] duration-130 hover:border-accent-line hover:bg-raised-hi focus-within:border-accent-line focus-within:bg-raised-hi"
-                for="subtitle-file" id="subtitle-drop">
-                <span class="dropzone-icon w-7.5 h-7.5 grid place-items-center rounded-sm text-muted bg-panel"
-                  aria-hidden="true">
-                  <svg class="w-4.25 h-4.25" viewBox="0 0 24 24">
-                    <path d="M5 5h14M5 9.5h9M5 14h14M5 18.5h7" />
-                  </svg>
-                </span>
-                <span class="min-w-0">
-                  <strong class="block text-[12.5px] font-semibold" data-i18n="source.subtitle">Phụ đề có sẵn</strong>
-                  <small class="block mt-0.5 overflow-hidden text-muted text-[11px] text-ellipsis whitespace-nowrap"
-                    data-i18n="source.subtitleHint" id="subtitle-name">Nhập file SRT hoặc VTT</small>
-                </span>
-                <input class="absolute w-px h-px opacity-0" id="subtitle-file" type="file"
-                  accept=".srt,.vtt,text/vtt,application/x-subrip" />
-              </label>
-            </section>
-
-            <section class="flex flex-col gap-2">
-              <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase" data-i18n="section.transcription">Nhận dạng</h2>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="transcription-provider">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.engine">Engine</span>
-                <select
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="transcription-provider">
-                  <option value="deepgram">Deepgram-Cloud</option>
-                  <option value="faster_whisper">faster-whisper-Local</option>
-                </select>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="transcription-model">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.model" id="transcription-model-label">Model</span>
-                <select
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="transcription-model">
-                  <option value="small">small</option>
-                </select>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="source-language">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.audioLanguage">Ngôn ngữ audio</span>
-                <select aria-describedby="source-language-hint"
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="source-language">
-                  <optgroup data-i18n-attr="label:lang.groupAuto" label="Tự động / Đa ngôn ngữ">
-                    <option data-i18n="lang.auto" value="auto" selected>Tự nhận diện</option>
-                    <option data-i18n="lang.multi" value="multi">🌐 Đa ngôn ngữ</option>
-                  </optgroup>
-
-                  <optgroup data-i18n-attr="label:lang.groupPopular" label="Phổ biến">
-                    <option value="vi">Tiếng Việt</option>
-                    <option value="en">English</option>
-                    <option value="zh">中文</option>
-                    <option value="zh-TW">繁體中文</option>
-                    <option value="ja">日本語</option>
-                    <option value="ko">한국어</option>
-                    <option value="fr">Français</option>
-                    <option value="es">Español</option>
-                    <option value="de">Deutsch</option>
-                    <option value="ru">Русский</option>
-                  </optgroup>
-
-                  <optgroup data-i18n-attr="label:lang.groupAsia" label="Châu Á &amp; Thái Bình Dương">
-                    <option value="th">ไทย</option>
-                    <option value="id">Bahasa Indonesia</option>
-                    <option value="ms">Bahasa Melayu</option>
-                    <option value="fil">Filipino / Tagalog</option>
-                    <option value="zh-CN">中文</option>
-                    <option value="zh-HK">粵語</option>
-                    <option value="zh-Hans">简体中文</option>
-                    <option value="zh-Hant">繁體中文</option>
-                    <option value="hi">हिन्दी</option>
-                    <option value="bn">বাংলা</option>
-                    <option value="ta">தமிழ்</option>
-                    <option value="te">తెలుగు</option>
-                    <option value="mr">मराठी</option>
-                    <option value="kn">ಕನ್ನಡ</option>
-                  </optgroup>
-
-                  <optgroup data-i18n-attr="label:lang.groupEnglish" label="Tiếng Anh &amp; Các khu vực">
-                    <option value="en-US">English</option>
-                    <option value="en-GB">English</option>
-                    <option value="en-AU">English</option>
-                    <option value="en-CA">English</option>
-                    <option value="en-IN">English</option>
-                    <option value="en-NZ">English</option>
-                    <option value="en-IE">English</option>
-                  </optgroup>
-
-                  <optgroup data-i18n-attr="label:lang.groupEurope" label="Châu Âu">
-                    <option value="it">Italiano</option>
-                    <option value="pt">Português</option>
-                    <option value="pt-BR">Português</option>
-                    <option value="pt-PT">Português</option>
-                    <option value="uk">Українська</option>
-                    <option value="nl">Nederlands</option>
-                    <option value="nl-BE">Vlaams</option>
-                    <option value="pl">Polski</option>
-                    <option value="tr">Türkçe</option>
-                    <option value="sv">Svenska</option>
-                    <option value="no">Norsk</option>
-                    <option value="da">Dansk</option>
-                    <option value="fi">Suomi</option>
-                    <option value="cs">Čeština</option>
-                    <option value="sk">Slovenčina</option>
-                    <option value="el">Ελληνικά</option>
-                    <option value="hu">Magyar</option>
-                    <option value="ro">Română</option>
-                    <option value="bg">Български</option>
-                    <option value="ca">Català</option>
-                    <option value="hr">Hrvatski</option>
-                    <option value="sr">Srpski</option>
-                    <option value="sl">Slovenščina</option>
-                    <option value="bs">Bosanski</option>
-                    <option value="mk">Македонски</option>
-                    <option value="be">Беларуская</option>
-                    <option value="et">Eesti</option>
-                    <option value="lv">Latviešu</option>
-                    <option value="lt">Lietuvių</option>
-                    <option value="fr-CA">Français</option>
-                    <option value="de-CH">Deutsch</option>
-                    <option value="es-419">Español</option>
-                  </optgroup>
-
-                  <optgroup data-i18n-attr="label:lang.groupMiddleEast" label="Trung Đông &amp; Tây Á">
-                    <option value="ar">العربية</option>
-                    <option value="he">עברית</option>
-                    <option value="fa">فارسی</option>
-                    <option value="ur">اردو</option>
-                  </optgroup>
-                </select>
-                <!-- Shown while the run would start without an explicit audio
-                     language, so the cost of auto-detect is visible before the
-                     click, not only in the confirm that follows it. -->
-                <p aria-live="polite"
-                  class="items-start gap-1.25 mt-0.5 px-2 py-1.5 border border-accent-line rounded-sm bg-accent-wash text-accent text-[10.5px] leading-[1.4]"
-                  id="source-language-hint" style="display: none">
-                  <svg class="w-3.5 h-3.5 shrink-0 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 3.6 2.9 19.4h18.2z" />
-                    <path d="M12 9.4v4.2M12 16.6v.4" />
-                  </svg>
-                  <span id="source-language-hint-text"></span>
-                </p>
-              </label>
-
-              <label
-                class="analysis-option grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 p-2 border border-line-soft rounded-sm bg-raised cursor-pointer"
-                for="speaker-analysis">
-                <input class="mt-0.5 mx-0 mb-0 accent-accent" id="speaker-analysis" type="checkbox" checked />
-                <span>
-                  <strong class="block text-text-dim text-[11.5px]" data-i18n="speakers.option">AI phân tích lượt thoại</strong>
-                  <small class="block mt-0.5 text-faint text-[10.5px] leading-[1.35]" data-i18n="speakers.optionNote">Giúp phân chia lời thoại từng
-                    người chính xác hơn nhưng tăng đáng kể thời gian.</small>
-                </span>
-              </label>
-
-              <button id="transcribe-btn"
-                class="flex items-center gap-2 h-8.5 mt-0.5 px-2.5 rounded-sm bg-accent text-accent-ink text-[12.5px] font-[650] transition-[background-color,opacity] duration-130 enabled:hover:bg-accent-hi disabled:opacity-40"
-                type="button" disabled>
-                <svg class="w-4 h-4 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M12 4v9M8.5 10.5 12 14l3.5-3.5" />
-                  <path d="M5 16v2.5h14V16" />
-                </svg>
-                <span class="flex-1 text-left" data-i18n="action.transcribe" id="transcribe-label">Tạo phụ đề</span>
-                <kbd
-                  class="mono px-1.25 py-px rounded-[3px] bg-[color-mix(in_srgb,var(--color-accent-ink)_14%,transparent)] text-[10px]">Ctrl
-                  ↵</kbd>
-              </button>
-
-              <button id="reanalyze-speakers-btn"
-                class="flex items-center gap-2 h-8.5 mt-0.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
-                type="button" disabled>
-                <svg class="w-4 h-4 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M4 12a8 8 0 1 0 2.3-5.7" />
-                  <path d="M4 5v5h5" />
-                  <path d="M9 12h6M12 9v6" />
-                </svg>
-                <span class="flex-1 text-left" data-i18n="action.reanalyze">Phân tích lại lượt thoại</span>
-              </button>
-            </section>
-
-            <section class="flex flex-col gap-2">
-              <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase" data-i18n="section.translate">Dịch</h2>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="translation-provider">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.engine">Engine</span>
-                <select
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="translation-provider">
-                  <option value="openai_compatible">MistralAI</option>
-                  <option value="transformers">Transformers</option>
-                </select>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="translation-model">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.modelLlm" id="translation-model-label">Model LLM</span>
-                <select
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="translation-model">
-                  <option value="mistral-small-latest">mistral-small-latest</option>
-                </select>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="target-language">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.targetLanguage">Ngôn ngữ đích</span>
-                <!-- value= is the wording sent to the model; data-lang is the ISO
-                     code the same-language guard compares against the source. -->
-                <select aria-describedby="target-language-hint"
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="target-language">
-                  <option data-lang="vi" value="Tiếng Việt" selected>Tiếng Việt</option>
-                  <option data-lang="en" value="English">English</option>
-                  <option data-lang="ja" value="日本語">日本語</option>
-                  <option data-lang="ko" value="한국어">한국어</option>
-                  <option data-lang="zh" value="中文">中文</option>
-                  <option data-lang="fr" value="Français">Français</option>
-                  <option data-lang="es" value="Español">Español</option>
-                </select>
-                <p aria-live="polite"
-                  class="items-start gap-1.25 mt-0.5 px-2 py-1.5 border border-accent-line rounded-sm bg-accent-wash text-accent text-[10.5px] leading-[1.4]"
-                  id="target-language-hint" style="display: none">
-                  <svg class="w-3.5 h-3.5 shrink-0 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 3.6 2.9 19.4h18.2z" />
-                    <path d="M12 9.4v4.2M12 16.6v.4" />
-                  </svg>
-                  <span id="target-language-hint-text"></span>
-                </p>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="translation-style">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.style">Phong cách</span>
-                <select
-                  class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
-                  id="translation-style">
-                  <option data-i18n="style.auto" value="auto" selected>Tự động theo ngôn ngữ nguồn</option>
-                </select>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="translation-style-notes">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.styleNotes">Quy tắc riêng</span>
-                <textarea
-                  class="w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-                  id="translation-style-notes" rows="4" maxlength="2000"
-                  data-i18n-attr="placeholder:field.styleNotesPlaceholder"
-                  placeholder="Mỗi dòng một ý. Thuật ngữ: 大哥 → đại ca&#10;Còn lại viết như một yêu cầu: giọng trẻ, không dùng từ Hán Việt nặng"></textarea>
-              </label>
-
-              <div class="flex items-center gap-1.5">
-                <button
-                  class="tool flex items-center gap-1.5 h-8 px-3 border border-line rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi"
-                  id="style-save" type="button">
-                  <svg class="w-3.75 h-3.75 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M5 4h11l3 3v13H5z" />
-                    <path d="M8 4v5h7V4M8 20v-6h8v6" />
-                  </svg>
-                  <span data-i18n="action.saveStyle">Lưu thành phong cách…</span>
-                </button>
-                <button
-                  class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi hover:border-line"
-                  id="style-delete" type="button" hidden data-i18n-attr="aria-label:action.deleteStyle"
-                  aria-label="Xóa phong cách đã lưu">
-                  <svg class="w-3.75 h-3.75 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
-                  </svg>
-                </button>
-              </div>
-
-              <button id="translate-btn"
-                class="flex items-center gap-2 h-8.5 mt-0.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
-                type="button" disabled>
-                <svg class="w-4 h-4 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M4 6h9M8.5 4v2c0 4-1.8 7.2-5.5 9" />
-                  <path d="M5 11c1.5 2.2 3.6 3.8 6 4.8M13.5 20 17 11l3.5 9M14.7 17h4.6" />
-                </svg>
-                <span class="flex-1 text-left" data-i18n="action.translateAll" id="translate-label">Dịch toàn bộ cue</span>
-              </button>
-
-              <button id="translate-from-btn"
-                class="flex items-center gap-2 h-8.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
-                type="button" disabled>
-                <svg class="w-4 h-4 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M4 7h7M4 12h7M4 17h7" />
-                  <path d="M14 12h6M17 9l3 3-3 3" />
-                </svg>
-                <span class="flex-1 text-left" data-i18n="action.translateFrom" id="translate-from-label">Dịch từ cue đang chọn</span>
-              </button>
-            </section>
-
-            <section class="flex flex-col gap-2">
-              <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase" data-i18n="section.dub">Lồng tiếng</h2>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="dub-voice">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.voice">Giọng đọc</span>
-                <select class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed" id="dub-voice"></select>
-              </label>
-
-              <label class="flex flex-col gap-1.25 min-w-0" for="dub-gain">
-                <span class="text-muted text-[11px] font-medium"><span data-i18n="field.dubOriginalGain">Tiếng gốc còn lại</span>
-                  · <span class="mono text-text-dim" id="dub-gain-value">25%</span></span>
-                <input class="w-full h-4.5 cursor-pointer" id="dub-gain" type="range" min="0" max="100" step="5" value="25" />
-              </label>
-
-              <label
-                class="analysis-option grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 p-2 border border-line-soft rounded-sm bg-raised cursor-pointer"
-                for="dub-shorten">
-                <input class="mt-0.5 mx-0 mb-0 accent-accent" id="dub-shorten" type="checkbox" checked />
-                <span>
-                  <strong class="block text-text-dim text-[11.5px]" data-i18n="dub.shorten">Cho AI rút gọn câu quá dài</strong>
-                  <small class="block mt-0.5 text-faint text-[10.5px] leading-[1.35]" data-i18n="dub.shortenNote">Câu nào đọc không kịp sẽ được
-                    LLM viết ngắn lại rồi thu lại.</small>
-                </span>
-              </label>
-
-              <button id="dub-btn" class="flex items-center gap-2 h-8.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40" type="button" disabled>
-                <svg class="w-4 h-4 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3z" />
-                  <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" />
-                </svg>
-                <span class="flex-1 text-left" data-i18n="action.dub" id="dub-label">Lồng tiếng toàn bộ</span>
-              </button>
-
-              <!-- Native controls on purpose: play, scrub and volume for a preview
-                   track are exactly what the browser already draws well. -->
-              <div class="flex flex-col gap-1" id="dub-preview-wrap" hidden>
-                <span class="text-muted text-[11px] font-medium" data-i18n="dub.preview">Nghe thử bản lồng tiếng</span>
-                <audio class="w-full h-8" id="dub-player" controls preload="none"></audio>
-                <small class="text-faint text-[10.5px]" data-i18n="dub.previewHint">Video sẽ tự tắt tiếng khi nghe thử</small>
-              </div>
-
-              <p class="text-faint text-[10.5px] leading-[1.45] wrap-anywhere" id="dub-report"></p>
-
-              <label
-                class="analysis-option grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 p-2 border border-line-soft rounded-sm bg-raised cursor-pointer"
-                for="dub-keep-original">
-                <input class="mt-0.5 mx-0 mb-0 accent-accent" id="dub-keep-original" type="checkbox" />
-                <span>
-                  <strong class="block text-text-dim text-[11.5px]" data-i18n="dub.keepOriginalTrack">Giữ tiếng gốc thành track phụ khi xuất</strong>
-                </span>
-              </label>
-            </section>
-
-            <section class="flex flex-col gap-2">
-              <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase" data-i18n="section.export">Xuất</h2>
-              <div class="grid grid-cols-2 gap-1.5">
-                <button id="download-source-srt"
-                  class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
-                  type="button" disabled>
-                  <span class="mono text-accent text-[10px] font-bold tracking-[0.04em]">SRT</span><small
-                    class="text-text-dim text-[11px]" data-i18n="export.source">Bản gốc</small>
-                </button>
-                <button id="download-translated-srt"
-                  class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
-                  type="button" disabled>
-                  <span class="mono text-accent text-[10px] font-bold tracking-[0.04em]">SRT</span><small
-                    class="text-text-dim text-[11px]" data-i18n="export.translated">Bản dịch</small>
-                </button>
-                <button id="download-vtt"
-                  class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
-                  type="button" disabled>
-                  <span class="mono text-accent text-[10px] font-bold tracking-[0.04em]">VTT</span><small
-                    class="text-text-dim text-[11px]" data-i18n="export.web">Web</small>
-                </button>
-                <button id="mux-btn"
-                  class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
-                  type="button" disabled>
-                  <span class="mono text-accent text-[10px] font-bold tracking-[0.04em]">MP4</span><small
-                    class="text-text-dim text-[11px]" data-i18n="export.mux">Ghép video</small>
-                </button>
-                <button id="mux-dub-btn"
-                  class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
-                  type="button" disabled>
-                  <span class="mono text-accent text-[10px] font-bold tracking-[0.04em]">MP4</span><small
-                    class="text-text-dim text-[11px]" data-i18n="action.muxDubbed">Xuất MP4 lồng tiếng</small>
-                </button>
-              </div>
-            </section>
-
-            <p class="mt-auto pt-3 border-t border-line-soft text-faint text-[11px] leading-[1.55] wrap-anywhere"
-              data-i18n="capability.checking" id="capability-note">Đang kiểm tra hệ thống…</p>
-          </div>
-        </aside>
+        <nav
+          class="flex gap-0.5 p-0.5 flex-none border border-line rounded-sm bg-raised"
+          data-i18n-attr="aria-label:nav.screens"
+          aria-label="Màn hình"
+        >
+          <button
+            type="button"
+            class="nav-tab flex items-center gap-1.5 h-5.5 px-2.25 max-tight:px-2 rounded-[3px] text-muted text-[11.5px] transition-[color,background-color] duration-120 hover:text-text"
+            data-goto="projects"
+          >
+            <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="3.5" y="4.5" width="7" height="7" rx="2" />
+              <rect x="13.5" y="4.5" width="7" height="7" rx="2" />
+              <rect x="3.5" y="14.5" width="7" height="5" rx="2" />
+              <rect x="13.5" y="14.5" width="7" height="5" rx="2" />
+            </svg>
+            <span class="max-tight:hidden" data-i18n="nav.projects">Dự án</span>
+          </button>
+          <button
+            type="button"
+            class="nav-tab flex items-center gap-1.5 h-5.5 px-2.25 max-tight:px-2 rounded-[3px] text-muted text-[11.5px] transition-[color,background-color] duration-120 hover:text-text"
+            data-goto="editor"
+          >
+            <svg class="w-3.5 h-3.5" aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="3" y="6" width="18" height="12" rx="3" />
+              <path d="M7 11h4M7 14.5h8" />
+            </svg>
+            <span class="max-tight:hidden" data-i18n="nav.editor"
+              >Biên tập</span
+            >
+          </button>
+        </nav>
 
         <div
-          class="splitter relative bg-line-soft transition-[background-color] duration-140 cursor-col-resize max-stack:hidden"
-          data-split="left" role="separator" aria-orientation="vertical" tabindex="0"
-          data-i18n-attr="aria-label:splitter.left" aria-label="Kéo để đổi rộng cột trái"></div>
+          class="min-w-0 flex items-center gap-2.5 flex-auto pl-3 border-l border-line-soft"
+        >
+          <span
+            class="mono flex-none px-1.5 py-0.5 border border-line rounded-[4px] text-muted text-[10px] tracking-[0.08em]"
+            data-i18n="project.kindEmpty"
+            id="project-kind"
+            >TRỐNG</span
+          >
+          <span
+            class="min-w-0 overflow-hidden text-text-dim text-[12.5px] text-ellipsis whitespace-nowrap"
+            data-i18n="project.none"
+            id="project-name"
+            >Chưa mở project</span
+          >
+          <span
+            class="project-save mono flex-none text-faint text-[11px]"
+            id="save-state"
+            aria-live="polite"
+            >—</span
+          >
+        </div>
 
-        <!-- Center: preview stage + timeline dock -->
-        <main
-          class="min-w-0 min-h-0 grid grid-rows-[minmax(120px,1fr)_5px_var(--h-dock)] bg-ground max-stack:-order-1 max-stack:h-[78vh]">
-          <section class="min-h-0 flex flex-col" id="stage">
-            <div class="viewer relative min-h-0 flex-1 flex items-center justify-center overflow-hidden" id="viewer">
-              <video id="player" playsinline preload="metadata"></video>
-              <div class="viewer-placeholder grid justify-items-center gap-2 p-6 text-[#6e737c] text-center"
-                id="viewer-placeholder">
-                <svg class="w-11.5 h-11.5 stroke-[1.3]" aria-hidden="true" viewBox="0 0 64 64">
-                  <rect x="8" y="14" width="48" height="36" rx="8" />
-                  <path d="M27 27l12 5-12 5Z" />
-                </svg>
-                <p class="text-[#9aa0a9] text-[13px]" data-i18n="viewer.empty">Chưa có video để xem trước</p>
-                <small class="max-w-80 text-[11.5px] leading-normal" data-i18n="viewer.emptyNote">Nhập phụ đề vẫn dựng được timeline, nhưng cần
-                  video để canh theo hình.</small>
-              </div>
-              <div
-                class="caption-overlay absolute left-1/2 z-2 grid gap-1.25 justify-items-center px-[4%] -translate-x-1/2 pointer-events-none text-center text-balance"
-                id="caption-overlay" data-track="both"></div>
-            </div>
+        <div class="flex items-center gap-1.5 flex-none">
+          <div
+            class="engine-chip flex items-center gap-1.75 max-w-65 max-tight:max-w-37.5 px-2.25 py-0.75 border border-line rounded-full bg-raised text-text-dim text-[11px]"
+            id="engine-chip"
+            data-i18n-attr="title:engine.chipTitle"
+            title="Provider nhận dạng đang dùng"
+          >
+            <span
+              class="engine-led w-1.5 h-1.5 flex-none rounded-full bg-ok"
+              aria-hidden="true"
+            ></span>
+            <span
+              class="mono overflow-hidden text-ellipsis whitespace-nowrap"
+              data-i18n="engine.detecting"
+              id="engine-label"
+              >Đang dò engine…</span
+            >
+          </div>
+          <button
+            class="flex items-center gap-1.5 h-6.5 px-2.25 border border-transparent rounded-sm text-muted text-[11.5px] transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised hover:border-line"
+            id="shortcuts-btn"
+            type="button"
+            data-i18n-attr="title:shortcuts.buttonTitle"
+            title="Phím tắt (F1)"
+          >
+            <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="2.5" y="6" width="19" height="12" rx="3" />
+              <path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" />
+            </svg>
+            <span data-i18n="shortcuts.button">Phím tắt</span>
+          </button>
+          <!-- The interface language. Nothing to do with the subtitle's target
+             language, which lives in the translation section. -->
+          <label class="flex items-center" for="ui-locale">
+            <span class="sr-only" data-i18n="locale.label"
+              >Ngôn ngữ giao diện</span
+            >
+            <select
+              class="h-6.5 pl-2 pr-1.5 border border-transparent rounded-sm bg-transparent text-muted text-[11.5px] outline-none transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised hover:border-line focus-visible:border-accent"
+              id="ui-locale"
+            ></select>
+          </label>
+          <button
+            class="w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-muted transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised hover:border-line"
+            id="theme-btn"
+            type="button"
+            data-i18n-attr="title:theme.toggle;aria-label:theme.toggle"
+            title="Đổi giao diện sáng/tối"
+            aria-label="Đổi giao diện sáng/tối"
+          >
+            <svg
+              class="icon-moon w-3.75 h-3.75"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+            >
+              <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
+            </svg>
+            <svg
+              class="icon-sun w-3.75 h-3.75"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+            >
+              <circle cx="12" cy="12" r="4.2" />
+              <path
+                d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
 
-            <div class="flex items-center gap-3 h-11 px-3 border-t border-line-soft bg-panel">
-              <div class="flex items-center gap-1">
-                <button
-                  class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
-                  id="prev-cue" type="button" data-i18n-attr="title:transport.prevCue;aria-label:transport.prevCueAria" title="Cue trước (Ctrl ←)" aria-label="Cue trước">
-                  <svg class="w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="M18 6 9 12l9 6Z" />
-                    <path d="M6 5.5v13" />
-                  </svg>
-                </button>
-                <button
-                  class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
-                  id="step-back" type="button" data-i18n-attr="title:transport.stepBack;aria-label:transport.stepBackAria" title="Lùi 1 frame (←)" aria-label="Lùi một frame">
-                  <svg class="w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="M14 6 7 12l7 6Z" />
-                  </svg>
-                </button>
-                <button
-                  class="w-8.5 h-7.5 grid place-items-center border border-line rounded-sm bg-raised text-accent transition-[color,background-color,border-color] duration-120 hover:bg-raised-hi hover:border-accent-line"
-                  id="play-btn" type="button" data-i18n-attr="title:transport.play;aria-label:transport.playAria" title="Phát / Dừng (Space)" aria-label="Phát hoặc dừng">
-                  <svg class="icon-play w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="M8 5.5 18 12 8 18.5Z" />
-                  </svg>
-                  <svg class="icon-pause w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M9 5.5v13M15 5.5v13" />
-                  </svg>
-                </button>
-                <button
-                  class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
-                  id="step-fwd" type="button" data-i18n-attr="title:transport.stepFwd;aria-label:transport.stepFwdAria" title="Tiến 1 frame (→)" aria-label="Tiến một frame">
-                  <svg class="w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="m10 6 7 6-7 6Z" />
-                  </svg>
-                </button>
-                <button
-                  class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
-                  id="next-cue" type="button" data-i18n-attr="title:transport.nextCue;aria-label:transport.nextCueAria" title="Cue sau (Ctrl →)" aria-label="Cue sau">
-                  <svg class="w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="m6 6 9 6-9 6Z" />
-                    <path d="M18 5.5v13" />
-                  </svg>
-                </button>
-              </div>
+      <!-- ── Work area ─────────────────────────────────────────────── -->
+      <div class="screens relative min-h-0">
+        <!-- ── Screen: editor ────────────────────────────────────────── -->
+        <div
+          class="workbench screen absolute inset-0 min-h-0 grid grid-cols-[var(--w-left)_5px_minmax(320px,1fr)_5px_var(--w-right)] max-tight:grid-cols-[var(--w-left)_5px_minmax(260px,1fr)_5px_var(--w-right)] max-stack:grid-cols-[minmax(0,1fr)] max-stack:grid-rows-[auto_auto_auto] max-stack:overflow-y-auto"
+          id="workbench"
+          data-screen="editor"
+        >
+          <!-- Left: setup inspector -->
+          <aside
+            class="min-w-0 min-h-0 flex flex-col bg-panel max-stack:border-t max-stack:border-line-soft"
+            id="pane-left"
+            data-i18n-attr="aria-label:pane.setup"
+            aria-label="Thiết lập project"
+          >
+            <div
+              class="min-h-0 flex-1 overflow-y-auto max-stack:overflow-visible p-3.5 pb-8 flex flex-col gap-4.5"
+            >
+              <section class="flex flex-col gap-2">
+                <h2
+                  class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase"
+                  data-i18n="section.source"
+                >
+                  Nguồn
+                </h2>
 
-              <div
-                class="mono flex items-baseline gap-1.5 px-2.5 py-0.75 border border-line rounded-sm bg-raised text-[12.5px] tracking-[0.01em]">
-                <strong class="text-accent font-semibold" id="tc-current">00:00:00.000</strong>
-                <span class="text-faint text-[11.5px]" id="tc-total">/ 00:00:00.000</span>
-              </div>
+                <label
+                  class="dropzone relative grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 p-2.5 border border-dashed border-line rounded-md bg-raised cursor-pointer transition-[border-color,background-color] duration-130 hover:border-accent-line hover:bg-raised-hi focus-within:border-accent-line focus-within:bg-raised-hi"
+                  for="video-file"
+                  id="video-drop"
+                >
+                  <span
+                    class="dropzone-icon w-7.5 h-7.5 grid place-items-center rounded-sm text-muted bg-panel"
+                    aria-hidden="true"
+                  >
+                    <svg class="w-4.25 h-4.25" viewBox="0 0 24 24">
+                      <path
+                        d="M4 7.5A2.5 2.5 0 0 1 6.5 5h7A2.5 2.5 0 0 1 16 7.5v9A2.5 2.5 0 0 1 13.5 19h-7A2.5 2.5 0 0 1 4 16.5Z"
+                      />
+                      <path d="m16 10.5 4-2.4v7.8l-4-2.4Z" />
+                    </svg>
+                  </span>
+                  <span class="min-w-0">
+                    <strong
+                      class="block text-[12.5px] font-semibold"
+                      data-i18n="source.video"
+                      >Video</strong
+                    >
+                    <small
+                      class="block mt-0.5 overflow-hidden text-muted text-[11px] text-ellipsis whitespace-nowrap"
+                      data-i18n="source.videoHint"
+                      id="video-name"
+                      >Kéo thả hoặc bấm chọn · MP4, MOV, MKV</small
+                    >
+                  </span>
+                  <input
+                    class="absolute w-px h-px opacity-0"
+                    id="video-file"
+                    type="file"
+                    accept="video/*,.mkv"
+                  />
+                </label>
 
-              <div class="flex items-center gap-2 ml-auto">
-                <div class="flex p-0.5 border border-line rounded-sm bg-raised" role="group"
-                  data-i18n-attr="aria-label:transport.captionGroup" aria-label="Phụ đề hiển thị trên video">
-                  <button type="button"
-                    class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                    data-track="source" data-i18n="track.source">Gốc</button>
-                  <button type="button"
-                    class="seg is-active px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                    data-track="both" data-i18n="track.both">Cả hai</button>
-                  <button type="button"
-                    class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                    data-track="translation" data-i18n="track.translation">Dịch</button>
-                  <button type="button"
-                    class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                    data-track="off" data-i18n="track.off">Tắt</button>
-                </div>
-                <label class="flex flex-row items-center gap-1.25 min-w-0" for="playback-rate">
-                  <span class="sr-only" data-i18n="transport.rate">Tốc độ phát</span>
-                  <select id="playback-rate"
-                    class="mono w-15.5 h-6.5 pl-2 pr-1.5 border border-line rounded-sm bg-raised text-text text-[11.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)]">
-                    <option value="0.5">0.5×</option>
-                    <option value="0.75">0.75×</option>
-                    <option value="1" selected>1×</option>
-                    <option value="1.5">1.5×</option>
-                    <option value="2">2×</option>
+                <label
+                  class="dropzone relative grid grid-cols-[30px_minmax(0,1fr)] items-center gap-2.5 p-2.5 border border-dashed border-line rounded-md bg-raised cursor-pointer transition-[border-color,background-color] duration-130 hover:border-accent-line hover:bg-raised-hi focus-within:border-accent-line focus-within:bg-raised-hi"
+                  for="subtitle-file"
+                  id="subtitle-drop"
+                >
+                  <span
+                    class="dropzone-icon w-7.5 h-7.5 grid place-items-center rounded-sm text-muted bg-panel"
+                    aria-hidden="true"
+                  >
+                    <svg class="w-4.25 h-4.25" viewBox="0 0 24 24">
+                      <path d="M5 5h14M5 9.5h9M5 14h14M5 18.5h7" />
+                    </svg>
+                  </span>
+                  <span class="min-w-0">
+                    <strong
+                      class="block text-[12.5px] font-semibold"
+                      data-i18n="source.subtitle"
+                      >Phụ đề có sẵn</strong
+                    >
+                    <small
+                      class="block mt-0.5 overflow-hidden text-muted text-[11px] text-ellipsis whitespace-nowrap"
+                      data-i18n="source.subtitleHint"
+                      id="subtitle-name"
+                      >Nhập file SRT hoặc VTT</small
+                    >
+                  </span>
+                  <input
+                    class="absolute w-px h-px opacity-0"
+                    id="subtitle-file"
+                    type="file"
+                    accept=".srt,.vtt,text/vtt,application/x-subrip"
+                  />
+                </label>
+              </section>
+
+              <section class="flex flex-col gap-2">
+                <h2
+                  class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase"
+                  data-i18n="section.transcription"
+                >
+                  Nhận dạng
+                </h2>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="transcription-provider"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.engine"
+                    >Engine</span
+                  >
+                  <select
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="transcription-provider"
+                  >
+                    <option value="deepgram">Deepgram-Cloud</option>
+                    <option value="faster_whisper">faster-whisper-Local</option>
                   </select>
                 </label>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="transcription-model"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.model"
+                    id="transcription-model-label"
+                    >Model</span
+                  >
+                  <select
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="transcription-model"
+                  >
+                    <option value="small">small</option>
+                  </select>
+                </label>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="source-language"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.audioLanguage"
+                    >Ngôn ngữ audio</span
+                  >
+                  <select
+                    aria-describedby="source-language-hint"
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="source-language"
+                  >
+                    <optgroup
+                      data-i18n-attr="label:lang.groupAuto"
+                      label="Tự động / Đa ngôn ngữ"
+                    >
+                      <option data-i18n="lang.auto" value="auto" selected>
+                        Tự nhận diện
+                      </option>
+                      <option data-i18n="lang.multi" value="multi">
+                        🌐 Đa ngôn ngữ
+                      </option>
+                    </optgroup>
+
+                    <optgroup
+                      data-i18n-attr="label:lang.groupPopular"
+                      label="Phổ biến"
+                    >
+                      <option value="vi">Tiếng Việt</option>
+                      <option value="en">English</option>
+                      <option value="zh">中文</option>
+                      <option value="zh-TW">繁體中文</option>
+                      <option value="ja">日本語</option>
+                      <option value="ko">한국어</option>
+                      <option value="fr">Français</option>
+                      <option value="es">Español</option>
+                      <option value="de">Deutsch</option>
+                      <option value="ru">Русский</option>
+                    </optgroup>
+
+                    <optgroup
+                      data-i18n-attr="label:lang.groupAsia"
+                      label="Châu Á &amp; Thái Bình Dương"
+                    >
+                      <option value="th">ไทย</option>
+                      <option value="id">Bahasa Indonesia</option>
+                      <option value="ms">Bahasa Melayu</option>
+                      <option value="fil">Filipino / Tagalog</option>
+                      <option value="zh-CN">中文</option>
+                      <option value="zh-HK">粵語</option>
+                      <option value="zh-Hans">简体中文</option>
+                      <option value="zh-Hant">繁體中文</option>
+                      <option value="hi">हिन्दी</option>
+                      <option value="bn">বাংলা</option>
+                      <option value="ta">தமிழ்</option>
+                      <option value="te">తెలుగు</option>
+                      <option value="mr">मराठी</option>
+                      <option value="kn">ಕನ್ನಡ</option>
+                    </optgroup>
+
+                    <optgroup
+                      data-i18n-attr="label:lang.groupEnglish"
+                      label="Tiếng Anh &amp; Các khu vực"
+                    >
+                      <option value="en-US">English</option>
+                      <option value="en-GB">English</option>
+                      <option value="en-AU">English</option>
+                      <option value="en-CA">English</option>
+                      <option value="en-IN">English</option>
+                      <option value="en-NZ">English</option>
+                      <option value="en-IE">English</option>
+                    </optgroup>
+
+                    <optgroup
+                      data-i18n-attr="label:lang.groupEurope"
+                      label="Châu Âu"
+                    >
+                      <option value="it">Italiano</option>
+                      <option value="pt">Português</option>
+                      <option value="pt-BR">Português</option>
+                      <option value="pt-PT">Português</option>
+                      <option value="uk">Українська</option>
+                      <option value="nl">Nederlands</option>
+                      <option value="nl-BE">Vlaams</option>
+                      <option value="pl">Polski</option>
+                      <option value="tr">Türkçe</option>
+                      <option value="sv">Svenska</option>
+                      <option value="no">Norsk</option>
+                      <option value="da">Dansk</option>
+                      <option value="fi">Suomi</option>
+                      <option value="cs">Čeština</option>
+                      <option value="sk">Slovenčina</option>
+                      <option value="el">Ελληνικά</option>
+                      <option value="hu">Magyar</option>
+                      <option value="ro">Română</option>
+                      <option value="bg">Български</option>
+                      <option value="ca">Català</option>
+                      <option value="hr">Hrvatski</option>
+                      <option value="sr">Srpski</option>
+                      <option value="sl">Slovenščina</option>
+                      <option value="bs">Bosanski</option>
+                      <option value="mk">Македонски</option>
+                      <option value="be">Беларуская</option>
+                      <option value="et">Eesti</option>
+                      <option value="lv">Latviešu</option>
+                      <option value="lt">Lietuvių</option>
+                      <option value="fr-CA">Français</option>
+                      <option value="de-CH">Deutsch</option>
+                      <option value="es-419">Español</option>
+                    </optgroup>
+
+                    <optgroup
+                      data-i18n-attr="label:lang.groupMiddleEast"
+                      label="Trung Đông &amp; Tây Á"
+                    >
+                      <option value="ar">العربية</option>
+                      <option value="he">עברית</option>
+                      <option value="fa">فارسی</option>
+                      <option value="ur">اردو</option>
+                    </optgroup>
+                  </select>
+                  <!-- Shown while the run would start without an explicit audio
+                     language, so the cost of auto-detect is visible before the
+                     click, not only in the confirm that follows it. -->
+                  <p
+                    aria-live="polite"
+                    class="items-start gap-1.25 mt-0.5 px-2 py-1.5 border border-accent-line rounded-sm bg-accent-wash text-accent text-[10.5px] leading-[1.4]"
+                    id="source-language-hint"
+                    style="display: none"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5 shrink-0 stroke-[1.9]"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 3.6 2.9 19.4h18.2z" />
+                      <path d="M12 9.4v4.2M12 16.6v.4" />
+                    </svg>
+                    <span id="source-language-hint-text"></span>
+                  </p>
+                </label>
+
+                <label
+                  class="analysis-option grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 p-2 border border-line-soft rounded-sm bg-raised cursor-pointer"
+                  for="speaker-analysis"
+                >
+                  <input
+                    class="mt-0.5 mx-0 mb-0 accent-accent"
+                    id="speaker-analysis"
+                    type="checkbox"
+                    checked
+                  />
+                  <span>
+                    <strong
+                      class="block text-text-dim text-[11.5px]"
+                      data-i18n="speakers.option"
+                      >AI phân tích lượt thoại</strong
+                    >
+                    <small
+                      class="block mt-0.5 text-faint text-[10.5px] leading-[1.35]"
+                      data-i18n="speakers.optionNote"
+                      >Giúp phân chia lời thoại từng người chính xác hơn nhưng
+                      tăng đáng kể thời gian.</small
+                    >
+                  </span>
+                </label>
+
                 <button
-                  class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
-                  id="mute-btn" type="button" data-i18n-attr="title:transport.mute;aria-label:transport.mute" title="Tắt tiếng (M)" aria-label="Tắt tiếng">
-                  <svg class="icon-vol w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="M5 9.5h3L12 6v12l-4-3.5H5Z" />
-                    <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10" />
+                  id="transcribe-btn"
+                  class="flex items-center gap-2 h-8.5 mt-0.5 px-2.5 rounded-sm bg-accent text-accent-ink text-[12.5px] font-[650] transition-[background-color,opacity] duration-130 enabled:hover:bg-accent-hi disabled:opacity-40"
+                  type="button"
+                  disabled
+                >
+                  <svg
+                    class="w-4 h-4 stroke-[1.9]"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 4v9M8.5 10.5 12 14l3.5-3.5" />
+                    <path d="M5 16v2.5h14V16" />
                   </svg>
-                  <svg class="icon-mute w-4.25 h-4.25" aria-hidden="true" viewBox="0 0 24 24">
-                    <path class="solid" d="M5 9.5h3L12 6v12l-4-3.5H5Z" />
-                    <path d="m16 10 4 4M20 10l-4 4" />
-                  </svg>
+                  <span
+                    class="flex-1 text-left"
+                    data-i18n="action.transcribe"
+                    id="transcribe-label"
+                    >Tạo phụ đề</span
+                  >
+                  <kbd
+                    class="mono px-1.25 py-px rounded-[3px] bg-[color-mix(in_srgb,var(--color-accent-ink)_14%,transparent)] text-[10px]"
+                    >Ctrl ↵</kbd
+                  >
                 </button>
-              </div>
+
+                <button
+                  id="reanalyze-speakers-btn"
+                  class="flex items-center gap-2 h-8.5 mt-0.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
+                  type="button"
+                  disabled
+                >
+                  <svg
+                    class="w-4 h-4 stroke-[1.9]"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M4 12a8 8 0 1 0 2.3-5.7" />
+                    <path d="M4 5v5h5" />
+                    <path d="M9 12h6M12 9v6" />
+                  </svg>
+                  <span class="flex-1 text-left" data-i18n="action.reanalyze"
+                    >Phân tích lại lượt thoại</span
+                  >
+                </button>
+              </section>
+
+              <section class="flex flex-col gap-2">
+                <h2
+                  class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase"
+                  data-i18n="section.translate"
+                >
+                  Dịch
+                </h2>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="translation-provider"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.engine"
+                    >Engine</span
+                  >
+                  <select
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="translation-provider"
+                  >
+                    <option value="openai_compatible">MistralAI</option>
+                    <option value="transformers">Transformers</option>
+                  </select>
+                </label>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="translation-model"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.modelLlm"
+                    id="translation-model-label"
+                    >Model LLM</span
+                  >
+                  <select
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="translation-model"
+                  >
+                    <option value="mistral-small-latest">
+                      mistral-small-latest
+                    </option>
+                  </select>
+                </label>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="target-language"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.targetLanguage"
+                    >Ngôn ngữ đích</span
+                  >
+                  <!-- value= is the wording sent to the model; data-lang is the ISO
+                     code the same-language guard compares against the source. -->
+                  <select
+                    aria-describedby="target-language-hint"
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="target-language"
+                  >
+                    <option data-lang="vi" value="Tiếng Việt" selected>
+                      Tiếng Việt
+                    </option>
+                    <option data-lang="en" value="English">English</option>
+                    <option data-lang="ja" value="日本語">日本語</option>
+                    <option data-lang="ko" value="한국어">한국어</option>
+                    <option data-lang="zh" value="中文">中文</option>
+                    <option data-lang="fr" value="Français">Français</option>
+                    <option data-lang="es" value="Español">Español</option>
+                  </select>
+                  <p
+                    aria-live="polite"
+                    class="items-start gap-1.25 mt-0.5 px-2 py-1.5 border border-accent-line rounded-sm bg-accent-wash text-accent text-[10.5px] leading-[1.4]"
+                    id="target-language-hint"
+                    style="display: none"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5 shrink-0 stroke-[1.9]"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 3.6 2.9 19.4h18.2z" />
+                      <path d="M12 9.4v4.2M12 16.6v.4" />
+                    </svg>
+                    <span id="target-language-hint-text"></span>
+                  </p>
+                </label>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="translation-style"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.style"
+                    >Phong cách</span
+                  >
+                  <select
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="translation-style"
+                  >
+                    <option data-i18n="style.auto" value="auto" selected>
+                      Tự động theo ngôn ngữ nguồn
+                    </option>
+                  </select>
+                </label>
+
+                <label
+                  class="flex flex-col gap-1.25 min-w-0"
+                  for="translation-style-notes"
+                >
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.styleNotes"
+                    >Quy tắc riêng</span
+                  >
+                  <textarea
+                    class="w-full px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+                    id="translation-style-notes"
+                    rows="4"
+                    maxlength="2000"
+                    data-i18n-attr="placeholder:field.styleNotesPlaceholder"
+                    placeholder="Mỗi dòng một ý. Thuật ngữ: 大哥 → đại ca&#10;Còn lại viết như một yêu cầu: giọng trẻ, không dùng từ Hán Việt nặng"
+                  ></textarea>
+                </label>
+
+                <div class="flex items-center gap-1.5">
+                  <button
+                    class="tool flex items-center gap-1.5 h-8 px-3 border border-line rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi"
+                    id="style-save"
+                    type="button"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75 stroke-[1.9]"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M5 4h11l3 3v13H5z" />
+                      <path d="M8 4v5h7V4M8 20v-6h8v6" />
+                    </svg>
+                    <span data-i18n="action.saveStyle"
+                      >Lưu thành phong cách…</span
+                    >
+                  </button>
+                  <button
+                    class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi hover:border-line"
+                    id="style-delete"
+                    type="button"
+                    hidden
+                    data-i18n-attr="aria-label:action.deleteStyle"
+                    aria-label="Xóa phong cách đã lưu"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75 stroke-[1.9]"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <button
+                  id="translate-btn"
+                  class="flex items-center gap-2 h-8.5 mt-0.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
+                  type="button"
+                  disabled
+                >
+                  <svg
+                    class="w-4 h-4 stroke-[1.9]"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M4 6h9M8.5 4v2c0 4-1.8 7.2-5.5 9" />
+                    <path
+                      d="M5 11c1.5 2.2 3.6 3.8 6 4.8M13.5 20 17 11l3.5 9M14.7 17h4.6"
+                    />
+                  </svg>
+                  <span
+                    class="flex-1 text-left"
+                    data-i18n="action.translateAll"
+                    id="translate-label"
+                    >Dịch toàn bộ cue</span
+                  >
+                </button>
+
+                <button
+                  id="translate-from-btn"
+                  class="flex items-center gap-2 h-8.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
+                  type="button"
+                  disabled
+                >
+                  <svg
+                    class="w-4 h-4 stroke-[1.9]"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M4 7h7M4 12h7M4 17h7" />
+                    <path d="M14 12h6M17 9l3 3-3 3" />
+                  </svg>
+                  <span
+                    class="flex-1 text-left"
+                    data-i18n="action.translateFrom"
+                    id="translate-from-label"
+                    >Dịch từ cue đang chọn</span
+                  >
+                </button>
+              </section>
+
+              <section class="flex flex-col gap-2">
+                <h2
+                  class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase"
+                  data-i18n="section.dub"
+                >
+                  Lồng tiếng
+                </h2>
+
+                <label class="flex flex-col gap-1.25 min-w-0" for="dub-voice">
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.voice"
+                    >Giọng đọc</span
+                  >
+                  <select
+                    class="w-full h-7.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="dub-voice"
+                  ></select>
+                </label>
+
+                <label class="flex flex-col gap-1.25 min-w-0" for="dub-gain">
+                  <span class="text-muted text-[11px] font-medium"
+                    ><span data-i18n="field.dubOriginalGain"
+                      >Tiếng gốc còn lại</span
+                    >
+                    ·
+                    <span class="mono text-text-dim" id="dub-gain-value"
+                      >25%</span
+                    ></span
+                  >
+                  <input
+                    class="w-full h-4.5 cursor-pointer"
+                    id="dub-gain"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value="25"
+                  />
+                </label>
+
+                <label
+                  class="analysis-option grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 p-2 border border-line-soft rounded-sm bg-raised cursor-pointer"
+                  for="dub-shorten"
+                >
+                  <input
+                    class="mt-0.5 mx-0 mb-0 accent-accent"
+                    id="dub-shorten"
+                    type="checkbox"
+                    checked
+                  />
+                  <span>
+                    <strong
+                      class="block text-text-dim text-[11.5px]"
+                      data-i18n="dub.shorten"
+                      >Cho AI rút gọn câu quá dài</strong
+                    >
+                    <small
+                      class="block mt-0.5 text-faint text-[10.5px] leading-[1.35]"
+                      data-i18n="dub.shortenNote"
+                      >Câu nào đọc không kịp sẽ được LLM viết ngắn lại rồi thu
+                      lại.</small
+                    >
+                  </span>
+                </label>
+
+                <button
+                  id="dub-btn"
+                  class="flex items-center gap-2 h-8.5 px-2.5 border border-line rounded-sm bg-raised text-text text-[12.5px] font-[650] transition-[background-color,border-color,opacity] duration-130 enabled:hover:bg-raised-hi enabled:hover:border-faint disabled:opacity-40"
+                  type="button"
+                  disabled
+                >
+                  <svg
+                    class="w-4 h-4 stroke-[1.9]"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3z"
+                    />
+                    <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" />
+                  </svg>
+                  <span
+                    class="flex-1 text-left"
+                    data-i18n="action.dub"
+                    id="dub-label"
+                    >Lồng tiếng toàn bộ</span
+                  >
+                </button>
+
+                <!-- Native controls on purpose: play, scrub and volume for a preview
+                   track are exactly what the browser already draws well. -->
+                <div class="flex flex-col gap-1" id="dub-preview-wrap" hidden>
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="dub.preview"
+                    >Nghe thử bản lồng tiếng</span
+                  >
+                  <audio
+                    class="w-full h-8"
+                    id="dub-player"
+                    controls
+                    preload="none"
+                  ></audio>
+                  <small
+                    class="text-faint text-[10.5px]"
+                    data-i18n="dub.previewHint"
+                    >Video sẽ tự tắt tiếng khi nghe thử</small
+                  >
+                </div>
+
+                <p
+                  class="text-faint text-[10.5px] leading-[1.45] wrap-anywhere"
+                  id="dub-report"
+                ></p>
+
+                <label
+                  class="analysis-option grid grid-cols-[16px_minmax(0,1fr)] items-start gap-2 p-2 border border-line-soft rounded-sm bg-raised cursor-pointer"
+                  for="dub-keep-original"
+                >
+                  <input
+                    class="mt-0.5 mx-0 mb-0 accent-accent"
+                    id="dub-keep-original"
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong
+                      class="block text-text-dim text-[11.5px]"
+                      data-i18n="dub.keepOriginalTrack"
+                      >Giữ tiếng gốc thành track phụ khi xuất</strong
+                    >
+                  </span>
+                </label>
+              </section>
+
+              <section class="flex flex-col gap-2">
+                <h2
+                  class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase"
+                  data-i18n="section.export"
+                >
+                  Xuất
+                </h2>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <button
+                    id="download-source-srt"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >SRT</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="export.source"
+                      >Bản gốc</small
+                    >
+                  </button>
+                  <button
+                    id="download-translated-srt"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >SRT</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="export.translated"
+                      >Bản dịch</small
+                    >
+                  </button>
+                  <button
+                    id="download-vtt"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >VTT</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="export.web"
+                      >Web</small
+                    >
+                  </button>
+                  <button
+                    id="mux-btn"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >MP4</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="export.mux"
+                      >Ghép video</small
+                    >
+                  </button>
+                  <button
+                    id="mux-dub-btn"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >MP4</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="action.muxDubbed"
+                      >Xuất MP4 lồng tiếng</small
+                    >
+                  </button>
+                </div>
+              </section>
+
+              <p
+                class="mt-auto pt-3 border-t border-line-soft text-faint text-[11px] leading-[1.55] wrap-anywhere"
+                data-i18n="capability.checking"
+                id="capability-note"
+              >
+                Đang kiểm tra hệ thống…
+              </p>
             </div>
-          </section>
+          </aside>
 
           <div
-            class="splitter splitter-h relative bg-line-soft transition-[background-color] duration-140 cursor-row-resize flex-none"
-            data-split="dock" role="separator" aria-orientation="horizontal" tabindex="0"
-            data-i18n-attr="aria-label:splitter.dock" aria-label="Kéo để đổi cao timeline"></div>
+            class="splitter relative bg-line-soft transition-[background-color] duration-140 cursor-col-resize max-stack:hidden"
+            data-split="left"
+            role="separator"
+            aria-orientation="vertical"
+            tabindex="0"
+            data-i18n-attr="aria-label:splitter.left"
+            aria-label="Kéo để đổi rộng cột trái"
+          ></div>
 
-          <!-- Timeline dock -->
-          <section class="min-h-0 grid grid-rows-[38px_minmax(0,1fr)] border-t border-line-soft bg-panel" id="dock"
-            data-i18n-attr="aria-label:timeline.label" aria-label="Timeline phụ đề">
-            <div
-              class="dock-bar flex items-center gap-3 px-2.5 border-b border-line-soft overflow-x-auto [scrollbar-width:none]">
-              <div class="tool-group flex items-center gap-0.75 flex-none">
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="undo-btn" type="button" disabled data-i18n-attr="title:tool.undo" title="Hoàn tác (Ctrl Z)">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M9 8H5V4" />
-                    <path d="M5.5 8.5A7.5 7.5 0 1 1 4.8 15" />
-                  </svg>
-                </button>
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="redo-btn" type="button" disabled data-i18n-attr="title:tool.redo" title="Làm lại (Ctrl Y)">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M15 8h4V4" />
-                    <path d="M18.5 8.5A7.5 7.5 0 1 0 19.2 15" />
-                  </svg>
-                </button>
-              </div>
-
-              <div class="tool-group flex items-center gap-0.75 flex-none">
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="add-cue-btn" type="button" disabled data-i18n-attr="title:tool.addCue" title="Thêm cue tại playhead (A)">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="split-btn" type="button" disabled data-i18n-attr="title:tool.split" title="Cắt cue tại playhead (S)">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 3v18" stroke-dasharray="3 3" />
-                    <path d="M7 7 5 5M17 7l2-2M7 17l-2 2M17 17l2 2" />
-                  </svg>
-                </button>
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="merge-btn" type="button" disabled data-i18n-attr="title:tool.merge" title="Gộp với cue kế tiếp (G)">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 12h6M14 12h6M9 9l3 3-3 3M15 9l-3 3 3 3" />
-                  </svg>
-                </button>
-                <button
-                  class="tool danger flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:bg-raised-hi disabled:opacity-35"
-                  id="delete-btn" type="button" disabled data-i18n-attr="title:tool.delete" title="Xóa cue đang chọn (Delete)">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" />
-                  </svg>
-                </button>
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="split-long-btn" type="button" disabled data-i18n-attr="title:tool.splitLong" title="Tách các cue dài thành đoạn ngắn chuẩn 1-2 dòng">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 6h16M4 12h16M4 18h8" />
-                    <path d="m15 15 3 3 3-3" />
-                  </svg><span data-i18n="tool.splitLongLabel">Tách cue dài</span>
-                </button>
-              </div>
-
-
-              <div class="tool-group flex items-center gap-0.75 flex-none">
-                <button
-                  class="tool toggle is-active flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:bg-raised-hi disabled:opacity-35"
-                  id="snap-btn" type="button" data-i18n-attr="title:tool.snap" title="Bật/tắt hít dính (N)" aria-pressed="true">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M7 4v8a5 5 0 0 0 10 0V4M7 8h10M12 17v3" />
-                  </svg>
-                </button>
-                <button
-                  class="tool toggle is-active flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:bg-raised-hi disabled:opacity-35"
-                  id="follow-btn" type="button" data-i18n-attr="title:tool.follow" title="Cuộn theo playhead" aria-pressed="true">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 4v16M8 8l4-4 4 4M6 20h12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div class="flex-1 min-w-1"></div>
-
-              <div class="tool-group flex items-center gap-1.5 flex-none">
-                <button
-                  class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="zoom-out" type="button" data-i18n-attr="title:tool.zoomOut;aria-label:tool.zoomOutAria" title="Thu nhỏ (−)" aria-label="Thu nhỏ timeline">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M5 12h14" />
-                  </svg>
-                </button>
-                <input class="w-27.5 h-4.5 cursor-pointer" id="zoom-range" type="range" min="0" max="100" value="40"
-                  data-i18n-attr="aria-label:tool.zoomRange" aria-label="Mức phóng timeline" />
-                <button
-                  class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="zoom-in" type="button" data-i18n-attr="title:tool.zoomIn;aria-label:tool.zoomInAria" title="Phóng to (+)" aria-label="Phóng to timeline">
-                  <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-                <button
-                  class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="zoom-fit" type="button" data-i18n-attr="title:tool.fit" title="Vừa khung (F)"><span>Fit</span></button>
-              </div>
-            </div>
-
-            <div class="min-h-0 grid grid-cols-[104px_minmax(0,1fr)] bg-ground" id="timeline">
-              <div class="grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)] border-r border-line bg-panel">
+          <!-- Center: preview stage + timeline dock -->
+          <main
+            class="min-w-0 min-h-0 grid grid-rows-[minmax(120px,1fr)_5px_var(--h-dock)] bg-ground max-stack:-order-1 max-stack:h-[78vh]"
+          >
+            <section class="min-h-0 flex flex-col" id="stage">
+              <div
+                class="viewer relative min-h-0 flex-1 flex items-center justify-center overflow-hidden"
+                id="viewer"
+              >
+                <video id="player" playsinline preload="metadata"></video>
                 <div
-                  class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-faint bg-raised text-[10px] tracking-[0.09em]">
-                  <span class="mono">TIMECODE</span>
+                  class="viewer-placeholder grid justify-items-center gap-2 p-6 text-[#6e737c] text-center"
+                  id="viewer-placeholder"
+                >
+                  <svg
+                    class="w-11.5 h-11.5 stroke-[1.3]"
+                    aria-hidden="true"
+                    viewBox="0 0 64 64"
+                  >
+                    <rect x="8" y="14" width="48" height="36" rx="8" />
+                    <path d="M27 27l12 5-12 5Z" />
+                  </svg>
+                  <p
+                    class="text-[#9aa0a9] text-[13px]"
+                    data-i18n="viewer.empty"
+                  >
+                    Chưa có video để xem trước
+                  </p>
+                  <small
+                    class="max-w-80 text-[11.5px] leading-normal"
+                    data-i18n="viewer.emptyNote"
+                    >Nhập phụ đề vẫn dựng được timeline, nhưng cần video để canh
+                    theo hình.</small
+                  >
                 </div>
                 <div
-                  class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-muted text-[10px] tracking-[0.09em]">
-                  <span aria-hidden="true"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-                      <path d="M4 12h2M8 8v8M12 5v14M16 9v6M20 12h0" />
-                    </svg></span>
-                  <span class="mono">AUDIO</span>
-                </div>
-                <div
-                  class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-muted text-[10px] tracking-[0.09em]">
-                  <span aria-hidden="true"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-                      <rect x="3" y="7" width="18" height="10" rx="2.5" />
-                      <path d="M7 11h4M7 13.5h8" />
-                    </svg></span>
-                  <span class="mono" data-i18n="track.subtitleHead">PHỤ ĐỀ</span>
-                </div>
+                  class="caption-overlay absolute left-1/2 z-2 grid gap-1.25 justify-items-center px-[4%] -translate-x-1/2 pointer-events-none text-center text-balance"
+                  id="caption-overlay"
+                  data-track="both"
+                ></div>
               </div>
 
-              <div class="relative min-w-0 overflow-x-auto overflow-y-hidden" id="timeline-scroll">
-                <div class="relative h-full min-w-full grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)]"
-                  id="timeline-canvas">
-                  <div class="lane relative min-h-0 border-b border-line bg-raised"><canvas id="ruler-canvas"></canvas>
+              <div
+                class="flex items-center gap-3 h-11 px-3 border-t border-line-soft bg-panel"
+              >
+                <div class="flex items-center gap-1">
+                  <button
+                    class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
+                    id="prev-cue"
+                    type="button"
+                    data-i18n-attr="title:transport.prevCue;aria-label:transport.prevCueAria"
+                    title="Cue trước (Ctrl ←)"
+                    aria-label="Cue trước"
+                  >
+                    <svg
+                      class="w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="M18 6 9 12l9 6Z" />
+                      <path d="M6 5.5v13" />
+                    </svg>
+                  </button>
+                  <button
+                    class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
+                    id="step-back"
+                    type="button"
+                    data-i18n-attr="title:transport.stepBack;aria-label:transport.stepBackAria"
+                    title="Lùi 1 frame (←)"
+                    aria-label="Lùi một frame"
+                  >
+                    <svg
+                      class="w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="M14 6 7 12l7 6Z" />
+                    </svg>
+                  </button>
+                  <button
+                    class="w-8.5 h-7.5 grid place-items-center border border-line rounded-sm bg-raised text-accent transition-[color,background-color,border-color] duration-120 hover:bg-raised-hi hover:border-accent-line"
+                    id="play-btn"
+                    type="button"
+                    data-i18n-attr="title:transport.play;aria-label:transport.playAria"
+                    title="Phát / Dừng (Space)"
+                    aria-label="Phát hoặc dừng"
+                  >
+                    <svg
+                      class="icon-play w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="M8 5.5 18 12 8 18.5Z" />
+                    </svg>
+                    <svg
+                      class="icon-pause w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M9 5.5v13M15 5.5v13" />
+                    </svg>
+                  </button>
+                  <button
+                    class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
+                    id="step-fwd"
+                    type="button"
+                    data-i18n-attr="title:transport.stepFwd;aria-label:transport.stepFwdAria"
+                    title="Tiến 1 frame (→)"
+                    aria-label="Tiến một frame"
+                  >
+                    <svg
+                      class="w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="m10 6 7 6-7 6Z" />
+                    </svg>
+                  </button>
+                  <button
+                    class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
+                    id="next-cue"
+                    type="button"
+                    data-i18n-attr="title:transport.nextCue;aria-label:transport.nextCueAria"
+                    title="Cue sau (Ctrl →)"
+                    aria-label="Cue sau"
+                  >
+                    <svg
+                      class="w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="m6 6 9 6-9 6Z" />
+                      <path d="M18 5.5v13" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div
+                  class="mono flex items-baseline gap-1.5 px-2.5 py-0.75 border border-line rounded-sm bg-raised text-[12.5px] tracking-[0.01em]"
+                >
+                  <strong class="text-accent font-semibold" id="tc-current"
+                    >00:00:00.000</strong
+                  >
+                  <span class="text-faint text-[11.5px]" id="tc-total"
+                    >/ 00:00:00.000</span
+                  >
+                </div>
+
+                <div class="flex items-center gap-2 ml-auto">
+                  <div
+                    class="flex p-0.5 border border-line rounded-sm bg-raised"
+                    role="group"
+                    data-i18n-attr="aria-label:transport.captionGroup"
+                    aria-label="Phụ đề hiển thị trên video"
+                  >
+                    <button
+                      type="button"
+                      class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                      data-track="source"
+                      data-i18n="track.source"
+                    >
+                      Gốc
+                    </button>
+                    <button
+                      type="button"
+                      class="seg is-active px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                      data-track="both"
+                      data-i18n="track.both"
+                    >
+                      Cả hai
+                    </button>
+                    <button
+                      type="button"
+                      class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                      data-track="translation"
+                      data-i18n="track.translation"
+                    >
+                      Dịch
+                    </button>
+                    <button
+                      type="button"
+                      class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                      data-track="off"
+                      data-i18n="track.off"
+                    >
+                      Tắt
+                    </button>
                   </div>
-                  <!-- No overflow-hidden here: it would become the sticky
+                  <label
+                    class="flex flex-row items-center gap-1.25 min-w-0"
+                    for="playback-rate"
+                  >
+                    <span class="sr-only" data-i18n="transport.rate"
+                      >Tốc độ phát</span
+                    >
+                    <select
+                      id="playback-rate"
+                      class="mono w-15.5 h-6.5 pl-2 pr-1.5 border border-line rounded-sm bg-raised text-text text-[11.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+                    >
+                      <option value="0.5">0.5×</option>
+                      <option value="0.75">0.75×</option>
+                      <option value="1" selected>1×</option>
+                      <option value="1.5">1.5×</option>
+                      <option value="2">2×</option>
+                    </select>
+                  </label>
+                  <button
+                    class="w-7 h-7 grid place-items-center rounded-sm text-text-dim transition-[color,background-color] duration-120 hover:text-text hover:bg-raised-hi"
+                    id="mute-btn"
+                    type="button"
+                    data-i18n-attr="title:transport.mute;aria-label:transport.mute"
+                    title="Tắt tiếng (M)"
+                    aria-label="Tắt tiếng"
+                  >
+                    <svg
+                      class="icon-vol w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="M5 9.5h3L12 6v12l-4-3.5H5Z" />
+                      <path
+                        d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10"
+                      />
+                    </svg>
+                    <svg
+                      class="icon-mute w-4.25 h-4.25"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path class="solid" d="M5 9.5h3L12 6v12l-4-3.5H5Z" />
+                      <path d="m16 10 4 4M20 10l-4 4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div
+              class="splitter splitter-h relative bg-line-soft transition-[background-color] duration-140 cursor-row-resize flex-none"
+              data-split="dock"
+              role="separator"
+              aria-orientation="horizontal"
+              tabindex="0"
+              data-i18n-attr="aria-label:splitter.dock"
+              aria-label="Kéo để đổi cao timeline"
+            ></div>
+
+            <!-- Timeline dock -->
+            <section
+              class="min-h-0 grid grid-rows-[38px_minmax(0,1fr)] border-t border-line-soft bg-panel"
+              id="dock"
+              data-i18n-attr="aria-label:timeline.label"
+              aria-label="Timeline phụ đề"
+            >
+              <div
+                class="dock-bar flex items-center gap-3 px-2.5 border-b border-line-soft overflow-x-auto [scrollbar-width:none]"
+              >
+                <div class="tool-group flex items-center gap-0.75 flex-none">
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="undo-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.undo"
+                    title="Hoàn tác (Ctrl Z)"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M9 8H5V4" />
+                      <path d="M5.5 8.5A7.5 7.5 0 1 1 4.8 15" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="redo-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.redo"
+                    title="Làm lại (Ctrl Y)"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M15 8h4V4" />
+                      <path d="M18.5 8.5A7.5 7.5 0 1 0 19.2 15" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div class="tool-group flex items-center gap-0.75 flex-none">
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="add-cue-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.addCue"
+                    title="Thêm cue tại playhead (A)"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="split-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.split"
+                    title="Cắt cue tại playhead (S)"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle cx="6" cy="6" r="3" />
+                      <path d="M8.12 8.12 12 12" />
+                      <path d="M20 4 8.12 15.88" />
+                      <circle cx="6" cy="18" r="3" />
+                      <path d="M14.8 14.8 20 20" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="merge-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.merge"
+                    title="Gộp với cue kế tiếp (G)"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M4 12h6M14 12h6M9 9l3 3-3 3M15 9l-3 3 3 3" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool danger flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:bg-raised-hi disabled:opacity-35"
+                    id="delete-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.delete"
+                    title="Xóa cue đang chọn (Delete)"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="split-long-btn"
+                    type="button"
+                    disabled
+                    data-i18n-attr="title:tool.splitLong"
+                    title="Tách các cue dài thành đoạn ngắn chuẩn 1-2 dòng"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M4 6h16M4 12h16M4 18h8" />
+                      <path d="m15 15 3 3 3-3" />
+                    </svg>
+                    <span data-i18n="tool.splitLongLabel">Tách cue dài</span>
+                  </button>
+                </div>
+
+                <div class="tool-group flex items-center gap-0.75 flex-none">
+                  <button
+                    class="tool toggle is-active flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:bg-raised-hi disabled:opacity-35"
+                    id="snap-btn"
+                    type="button"
+                    data-i18n-attr="title:tool.snap"
+                    title="Bật/tắt hít dính (N)"
+                    aria-pressed="true"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M7 4v8a5 5 0 0 0 10 0V4M7 8h10M12 17v3" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool toggle is-active flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:bg-raised-hi disabled:opacity-35"
+                    id="follow-btn"
+                    type="button"
+                    data-i18n-attr="title:tool.follow"
+                    title="Cuộn theo playhead"
+                    aria-pressed="true"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 4v16M8 8l4-4 4 4M6 20h12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div class="flex-1 min-w-1"></div>
+
+                <div class="tool-group flex items-center gap-1.5 flex-none">
+                  <button
+                    class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="zoom-out"
+                    type="button"
+                    data-i18n-attr="title:tool.zoomOut;aria-label:tool.zoomOutAria"
+                    title="Thu nhỏ (−)"
+                    aria-label="Thu nhỏ timeline"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M5 12h14" />
+                    </svg>
+                  </button>
+                  <input
+                    class="w-27.5 h-4.5 cursor-pointer"
+                    id="zoom-range"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="40"
+                    data-i18n-attr="aria-label:tool.zoomRange"
+                    aria-label="Mức phóng timeline"
+                  />
+                  <button
+                    class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="zoom-in"
+                    type="button"
+                    data-i18n-attr="title:tool.zoomIn;aria-label:tool.zoomInAria"
+                    title="Phóng to (+)"
+                    aria-label="Phóng to timeline"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool flex items-center gap-1.5 h-6.5 px-2 border border-transparent rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="zoom-fit"
+                    type="button"
+                    data-i18n-attr="title:tool.fit"
+                    title="Vừa khung (F)"
+                  >
+                    <span>Fit</span>
+                  </button>
+                </div>
+              </div>
+
+              <div
+                class="min-h-0 grid grid-cols-[104px_minmax(0,1fr)] bg-ground"
+                id="timeline"
+              >
+                <div
+                  class="grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)] border-r border-line bg-panel"
+                >
+                  <div
+                    class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-faint bg-raised text-[10px] tracking-[0.09em]"
+                  >
+                    <span class="mono">TIMECODE</span>
+                  </div>
+                  <div
+                    class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-muted text-[10px] tracking-[0.09em]"
+                  >
+                    <span aria-hidden="true"
+                      ><svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                        <path d="M4 12h2M8 8v8M12 5v14M16 9v6M20 12h0" />
+                      </svg>
+                    </span>
+                    <span class="mono">AUDIO</span>
+                  </div>
+                  <div
+                    class="track-head flex items-center gap-1.75 px-2.5 border-b border-line-soft text-muted text-[10px] tracking-[0.09em]"
+                  >
+                    <span aria-hidden="true"
+                      ><svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                        <rect x="3" y="7" width="18" height="10" rx="2.5" />
+                        <path d="M7 11h4M7 13.5h8" />
+                      </svg>
+                    </span>
+                    <span class="mono" data-i18n="track.subtitleHead"
+                      >PHỤ ĐỀ</span
+                    >
+                  </div>
+                </div>
+
+                <div
+                  class="relative min-w-0 overflow-x-auto overflow-y-hidden"
+                  id="timeline-scroll"
+                >
+                  <div
+                    class="relative h-full min-w-full grid grid-rows-[var(--h-ruler)_var(--h-wave)_minmax(0,1fr)]"
+                    id="timeline-canvas"
+                  >
+                    <div
+                      class="lane relative min-h-0 border-b border-line bg-raised"
+                    >
+                      <canvas id="ruler-canvas"></canvas>
+                    </div>
+                    <!-- No overflow-hidden here: it would become the sticky
                        canvas's scroll container, and a box that never scrolls
                        pins nothing — the waveform would slide out of view with
                        the content instead of staying under the playhead. -->
-                  <div class="lane relative min-h-0 border-b border-line-soft">
-                    <canvas id="wave-canvas"></canvas>
-                    <span
-                      class="mono absolute left-3 top-1/2 w-max text-faint text-[10px] tracking-[0.06em] -translate-y-1/2 pointer-events-none"
-                      data-i18n="wave.none" id="wave-note">Không có dạng sóng</span>
+                    <div
+                      class="lane relative min-h-0 border-b border-line-soft"
+                    >
+                      <canvas id="wave-canvas"></canvas>
+                      <span
+                        class="mono absolute left-3 top-1/2 w-max text-faint text-[10px] tracking-[0.06em] -translate-y-1/2 pointer-events-none"
+                        data-i18n="wave.none"
+                        id="wave-note"
+                        >Không có dạng sóng</span
+                      >
+                    </div>
+                    <div
+                      class="lane-clips relative min-h-0 overflow-hidden"
+                      id="clip-lane"
+                    ></div>
+                    <div
+                      class="absolute left-0 top-0 bottom-0 z-5 w-px bg-crit pointer-events-none will-change-transform"
+                      id="playhead"
+                    >
+                      <span
+                        class="absolute top-0 left-1/2 w-2.75 h-2.75 rounded-t-xs rounded-b-[6px] bg-crit -translate-x-1/2"
+                        aria-hidden="true"
+                      ></span>
+                    </div>
                   </div>
-                  <div class="lane-clips relative min-h-0 overflow-hidden" id="clip-lane"></div>
-                  <div class="absolute left-0 top-0 bottom-0 z-5 w-px bg-crit pointer-events-none will-change-transform"
-                    id="playhead"><span
-                      class="absolute top-0 left-1/2 w-2.75 h-2.75 rounded-t-xs rounded-b-[6px] bg-crit -translate-x-1/2"
-                      aria-hidden="true"></span></div>
+                </div>
+              </div>
+            </section>
+          </main>
+
+          <div
+            class="splitter relative bg-line-soft transition-[background-color] duration-140 cursor-col-resize max-stack:hidden"
+            data-split="right"
+            role="separator"
+            aria-orientation="vertical"
+            tabindex="0"
+            data-i18n-attr="aria-label:splitter.right"
+            aria-label="Kéo để đổi rộng cột phải"
+          ></div>
+
+          <!-- Right: cue list + inspector -->
+          <aside
+            class="min-w-0 min-h-0 flex flex-col bg-panel border-l border-line-soft max-stack:h-[70vh] max-stack:border-l-0 max-stack:border-t"
+            id="pane-right"
+            data-i18n-attr="aria-label:cuelist.pane"
+            aria-label="Danh sách và chi tiết cue"
+          >
+            <div
+              class="flex items-center justify-between h-8.5 px-3 border-b border-line-soft flex-none"
+            >
+              <h2
+                class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase"
+                data-i18n="cuelist.title"
+              >
+                Danh sách cue
+              </h2>
+              <span
+                class="mono px-1.75 py-px border border-line rounded-full text-muted text-[10.5px]"
+                id="cue-count"
+                >0</span
+              >
+            </div>
+
+            <div
+              class="flex-1 min-h-30 overflow-y-auto p-1.5 flex flex-col gap-0.75"
+              id="cue-list"
+              data-i18n-attr="aria-label:cuelist.aria"
+              aria-label="Cue"
+            >
+              <div
+                class="m-auto px-4.5 py-6 text-muted text-center"
+                id="list-empty"
+              >
+                <p class="text-[12.5px]" data-i18n="cuelist.empty">
+                  Chưa có cue nào.
+                </p>
+                <small
+                  class="block mt-1.5 text-faint text-[11px] leading-normal"
+                  data-i18n="cuelist.emptyNote"
+                  >Chọn video để AI nhận dạng, hoặc nhập file SRT/VTT sẵn
+                  có.</small
+                >
+              </div>
+            </div>
+
+            <div
+              class="splitter splitter-h relative h-1.5 w-full bg-line-soft transition-[background-color] duration-140 cursor-row-resize flex-none hover:bg-accent-line"
+              data-split="inspector"
+              role="separator"
+              aria-orientation="horizontal"
+              tabindex="0"
+              data-i18n-attr="aria-label:splitter.inspector"
+              aria-label="Kéo để đổi cao inspector"
+            ></div>
+
+            <div
+              class="inspector flex-none min-h-0 overflow-y-auto flex flex-col gap-2 p-3 border-t border-line bg-ground"
+              id="inspector"
+              data-empty="true"
+              style="height: var(--h-inspector, 390px); max-height: 70vh"
+            >
+              <div class="flex items-center justify-between shrink-0">
+                <span
+                  class="mono text-muted text-[10px] tracking-widest uppercase"
+                  id="inspector-index"
+                  >—</span
+                >
+                <div class="flex gap-0.5">
+                  <button
+                    class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="insp-prev"
+                    type="button"
+                    data-i18n-attr="title:inspector.prev;aria-label:inspector.prev"
+                    title="Cue trước"
+                    aria-label="Cue trước"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M15 6l-6 6 6 6" />
+                    </svg>
+                  </button>
+                  <button
+                    class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
+                    id="insp-next"
+                    type="button"
+                    data-i18n-attr="title:inspector.next;aria-label:inspector.next"
+                    title="Cue sau"
+                    aria-label="Cue sau"
+                  >
+                    <svg
+                      class="w-3.75 h-3.75"
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="m9 6 6 6-6 6" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-[1fr_1fr_76px] gap-1.5 shrink-0">
+                <label class="flex flex-col gap-1 min-w-0" for="insp-start">
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.in"
+                    >Vào</span
+                  >
+                  <input
+                    id="insp-start"
+                    class="mono w-full h-7 px-2 py-1 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 min-w-0" for="insp-end">
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.out"
+                    >Ra</span
+                  >
+                  <input
+                    id="insp-end"
+                    class="mono w-full h-7 px-2 py-1 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+                    type="text"
+                    inputmode="decimal"
+                    autocomplete="off"
+                  />
+                </label>
+                <div class="flex flex-col gap-1 min-w-0">
+                  <span
+                    class="text-muted text-[11px] font-medium"
+                    data-i18n="field.length"
+                    >Dài</span
+                  >
+                  <output
+                    id="insp-duration"
+                    class="mono flex items-center h-7 px-2 border border-line-soft rounded-sm bg-panel text-muted text-[12px]"
+                    >0.000</output
+                  >
+                </div>
+              </div>
+
+              <div class="flex gap-1.5 shrink-0">
+                <button
+                  class="tool flex flex-1 items-center justify-center gap-1.5 h-6.5 px-2 border border-line rounded-sm bg-raised text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi disabled:opacity-35"
+                  id="mark-in"
+                  type="button"
+                  data-i18n-attr="title:action.markInTitle"
+                  title="Đặt điểm vào tại playhead (I)"
+                >
+                  <span
+                    class="mono px-1 rounded-[3px] bg-panel text-accent text-[10px]"
+                    >I</span
+                  >
+                  <span data-i18n="action.markIn">Lấy vào</span>
+                </button>
+                <button
+                  class="tool flex flex-1 items-center justify-center gap-1.5 h-6.5 px-2 border border-line rounded-sm bg-raised text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi disabled:opacity-35"
+                  id="mark-out"
+                  type="button"
+                  data-i18n-attr="title:action.markOutTitle"
+                  title="Đặt điểm ra tại playhead (O)"
+                >
+                  <span
+                    class="mono px-1 rounded-[3px] bg-panel text-accent text-[10px]"
+                    >O</span
+                  >
+                  <span data-i18n="action.markOut">Lấy ra</span>
+                </button>
+              </div>
+
+              <label
+                class="flex flex-col gap-1 min-w-0 shrink-0"
+                for="insp-text"
+              >
+                <span
+                  class="text-muted text-[11px] font-medium"
+                  data-i18n="field.sourceText"
+                  >Văn bản gốc</span
+                >
+                <textarea
+                  id="insp-text"
+                  class="w-full h-15 min-h-12 px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)] shrink-0"
+                  spellcheck="false"
+                ></textarea>
+              </label>
+
+              <label
+                class="flex flex-col gap-1 min-w-0 shrink-0"
+                for="insp-translation"
+              >
+                <span
+                  class="text-muted text-[11px] font-medium"
+                  data-i18n="field.translationText"
+                  >Bản dịch</span
+                >
+                <textarea
+                  id="insp-translation"
+                  class="w-full h-15 min-h-12 px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)] shrink-0"
+                  spellcheck="false"
+                ></textarea>
+              </label>
+
+              <div class="grid grid-cols-3 gap-1.5 pt-0.5 shrink-0" id="meters">
+                <div
+                  class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel"
+                >
+                  <span
+                    class="mono text-faint text-[9px] tracking-[0.09em]"
+                    data-i18n="meter.chars"
+                    >KÝ TỰ</span
+                  >
+                  <strong
+                    class="mono text-text-dim text-[13px] font-semibold"
+                    id="meter-chars"
+                    >0</strong
+                  >
+                </div>
+                <div
+                  class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel"
+                  id="meter-cps-wrap"
+                >
+                  <span class="mono text-faint text-[9px] tracking-[0.09em]"
+                    >CPS</span
+                  >
+                  <strong
+                    class="mono text-text-dim text-[13px] font-semibold"
+                    id="meter-cps"
+                    >0.0</strong
+                  >
+                </div>
+                <div
+                  class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel"
+                >
+                  <span
+                    class="mono text-faint text-[9px] tracking-[0.09em]"
+                    data-i18n="meter.gap"
+                    >KHOẢNG HỞ</span
+                  >
+                  <strong
+                    class="mono text-text-dim text-[13px] font-semibold"
+                    id="meter-gap"
+                    >—</strong
+                  >
                 </div>
               </div>
             </div>
-          </section>
+          </aside>
+        </div>
+
+        <!-- ── Screen: projects dashboard ────────────────────────────── -->
+        <main
+          class="screen absolute inset-0 overflow-hidden bg-ground"
+          data-screen="projects"
+          hidden
+        >
+          <div
+            class="h-full overflow-y-auto pt-6.5 px-[clamp(18px,4vw,44px)] pb-10"
+          >
+            <header
+              class="max-w-360 mx-auto flex items-end justify-between gap-5 flex-wrap mb-5.5"
+            >
+              <div>
+                <h1
+                  class="text-[26px] font-[650] tracking-[-0.02em]"
+                  data-i18n="dash.title"
+                >
+                  Dự án
+                </h1>
+                <p
+                  class="mt-1 text-muted text-[12.5px]"
+                  data-i18n="dash.reading"
+                  id="dash-subtitle"
+                >
+                  Đang đọc workspace…
+                </p>
+              </div>
+              <div class="flex items-center gap-2 max-dense:w-full">
+                <label
+                  class="search-box flex items-center gap-1.75 h-8.5 px-2.5 border border-line rounded-sm bg-raised text-muted transition-[border-color] duration-120 focus-within:border-accent max-dense:flex-1"
+                  for="dash-search"
+                >
+                  <svg
+                    class="w-3.75 h-3.75 flex-none"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle cx="11" cy="11" r="6.5" />
+                    <path d="m16 16 4 4" />
+                  </svg>
+                  <input
+                    class="w-47.5 max-dense:w-full border-0 bg-transparent text-text text-[12.5px] outline-none"
+                    id="dash-search"
+                    type="search"
+                    data-i18n-attr="placeholder:dash.searchPlaceholder"
+                    placeholder="Tìm theo tên file…"
+                    autocomplete="off"
+                  />
+                </label>
+                <button
+                  class="flex items-center gap-2 h-8.5 px-2.5 rounded-sm bg-accent text-accent-ink text-[12.5px] font-[650] transition-[background-color,opacity] duration-130 enabled:hover:bg-accent-hi disabled:opacity-40"
+                  id="dash-new"
+                  type="button"
+                >
+                  <svg
+                    class="w-4 h-4 stroke-[1.9]"
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  <span class="flex-1 text-left" data-i18n="dash.new"
+                    >Project mới</span
+                  >
+                </button>
+              </div>
+            </header>
+
+            <section
+              class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5 mb-5"
+              data-i18n-attr="aria-label:dash.statsAria"
+              aria-label="Tổng quan workspace"
+            >
+              <div
+                class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel"
+              >
+                <span
+                  class="mono text-faint text-[9.5px] tracking-widest"
+                  data-i18n="stat.projects"
+                  >PROJECT</span
+                >
+                <strong
+                  class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
+                  id="stat-projects"
+                  >0</strong
+                >
+                <span class="text-muted text-[11px]" id="stat-projects-note"
+                  >—</span
+                >
+              </div>
+              <div
+                class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel"
+              >
+                <span
+                  class="mono text-faint text-[9.5px] tracking-widest"
+                  data-i18n="stat.duration"
+                  >THỜI LƯỢNG PHỤ ĐỀ</span
+                >
+                <strong
+                  class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
+                  id="stat-duration"
+                  >0:00</strong
+                >
+                <span class="text-muted text-[11px]" id="stat-duration-note"
+                  >—</span
+                >
+              </div>
+              <div
+                class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel"
+              >
+                <span
+                  class="mono text-faint text-[9.5px] tracking-widest"
+                  data-i18n="stat.cues"
+                  >CUE</span
+                >
+                <strong
+                  class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
+                  id="stat-cues-total"
+                  >0</strong
+                >
+                <span class="text-muted text-[11px]" id="stat-cues-note"
+                  >—</span
+                >
+              </div>
+              <div
+                class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel"
+              >
+                <span
+                  class="mono text-faint text-[9.5px] tracking-widest"
+                  data-i18n="stat.disk"
+                  >DUNG LƯỢNG ĐĨA</span
+                >
+                <strong
+                  class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
+                  id="stat-disk"
+                  >0 MB</strong
+                >
+                <span class="text-muted text-[11px]" id="stat-disk-note"
+                  >—</span
+                >
+              </div>
+            </section>
+
+            <div
+              class="max-w-360 mx-auto flex items-center justify-between gap-3.5 mb-3.5"
+            >
+              <div
+                class="flex p-0.5 border border-line rounded-sm bg-raised"
+                id="dash-filters"
+                role="group"
+                data-i18n-attr="aria-label:dash.filtersAria"
+                aria-label="Lọc project"
+              >
+                <button
+                  type="button"
+                  class="seg is-active px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                  data-filter="all"
+                  data-i18n="filter.all"
+                >
+                  Tất cả
+                </button>
+                <button
+                  type="button"
+                  class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                  data-filter="translated"
+                  data-i18n="filter.translated"
+                >
+                  Đã dịch
+                </button>
+                <button
+                  type="button"
+                  class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                  data-filter="untranslated"
+                  data-i18n="filter.untranslated"
+                >
+                  Chưa dịch
+                </button>
+                <button
+                  type="button"
+                  class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
+                  data-filter="problem"
+                  data-i18n="filter.problem"
+                >
+                  Cần xem lại
+                </button>
+              </div>
+              <span class="mono text-faint text-[11px]" id="dash-count"
+                >0 project</span
+              >
+            </div>
+
+            <div
+              class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fill,minmax(236px,1fr))] gap-3.5"
+              id="project-grid"
+            ></div>
+
+            <div
+              class="max-w-360 mx-auto grid justify-items-center gap-1.75 px-5 py-14 text-muted text-center"
+              id="dash-empty"
+              hidden
+            >
+              <svg
+                class="w-11 h-11 text-faint stroke-[1.3]"
+                aria-hidden="true"
+                viewBox="0 0 64 64"
+              >
+                <rect x="8" y="16" width="48" height="34" rx="7" />
+                <path d="M8 26h48M20 38h16" />
+              </svg>
+              <p
+                class="text-[14px] text-text-dim"
+                data-i18n="dash.emptyTitle"
+                id="dash-empty-title"
+              >
+                Chưa có project nào
+              </p>
+              <small
+                class="text-[12px]"
+                data-i18n="dash.emptyNote"
+                id="dash-empty-note"
+                >Tạo phụ đề cho video đầu tiên để nó xuất hiện ở đây.</small
+              >
+            </div>
+          </div>
         </main>
-
-        <div
-          class="splitter relative bg-line-soft transition-[background-color] duration-140 cursor-col-resize max-stack:hidden"
-          data-split="right" role="separator" aria-orientation="vertical" tabindex="0"
-          data-i18n-attr="aria-label:splitter.right" aria-label="Kéo để đổi rộng cột phải"></div>
-
-        <!-- Right: cue list + inspector -->
-        <aside
-          class="min-w-0 min-h-0 flex flex-col bg-panel border-l border-line-soft max-stack:h-[70vh] max-stack:border-l-0 max-stack:border-t"
-          id="pane-right" data-i18n-attr="aria-label:cuelist.pane" aria-label="Danh sách và chi tiết cue">
-          <div class="flex items-center justify-between h-8.5 px-3 border-b border-line-soft flex-none">
-            <h2 class="mono text-faint text-[10px] font-semibold tracking-[0.11em] uppercase" data-i18n="cuelist.title">Danh sách cue</h2>
-            <span class="mono px-1.75 py-px border border-line rounded-full text-muted text-[10.5px]"
-              id="cue-count">0</span>
-          </div>
-
-          <div class="flex-1 min-h-30 overflow-y-auto p-1.5 flex flex-col gap-0.75" id="cue-list" data-i18n-attr="aria-label:cuelist.aria" aria-label="Cue">
-            <div class="m-auto px-4.5 py-6 text-muted text-center" id="list-empty">
-              <p class="text-[12.5px]" data-i18n="cuelist.empty">Chưa có cue nào.</p>
-              <small class="block mt-1.5 text-faint text-[11px] leading-normal" data-i18n="cuelist.emptyNote">Chọn video để AI nhận dạng, hoặc nhập
-                file
-                SRT/VTT sẵn có.</small>
-            </div>
-          </div>
-
-          <div
-            class="splitter splitter-h relative h-1.5 w-full bg-line-soft transition-[background-color] duration-140 cursor-row-resize flex-none hover:bg-accent-line"
-            data-split="inspector" role="separator" aria-orientation="horizontal" tabindex="0"
-            data-i18n-attr="aria-label:splitter.inspector" aria-label="Kéo để đổi cao inspector"></div>
-
-          <div
-            class="inspector flex-none min-h-0 overflow-y-auto flex flex-col gap-2 p-3 border-t border-line bg-ground"
-            id="inspector" data-empty="true" style="height: var(--h-inspector, 390px); max-height: 70vh;">
-            <div class="flex items-center justify-between shrink-0">
-              <span class="mono text-muted text-[10px] tracking-widest uppercase" id="inspector-index">—</span>
-              <div class="flex gap-0.5">
-                <button
-                  class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="insp-prev" type="button" data-i18n-attr="title:inspector.prev;aria-label:inspector.prev" title="Cue trước" aria-label="Cue trước"><svg class="w-3.75 h-3.75"
-                    aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M15 6l-6 6 6 6" />
-                  </svg></button>
-                <button
-                  class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi enabled:hover:border-line disabled:opacity-35"
-                  id="insp-next" type="button" data-i18n-attr="title:inspector.next;aria-label:inspector.next" title="Cue sau" aria-label="Cue sau"><svg class="w-3.75 h-3.75"
-                    aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="m9 6 6 6-6 6" />
-                  </svg></button>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-[1fr_1fr_76px] gap-1.5 shrink-0">
-              <label class="flex flex-col gap-1 min-w-0" for="insp-start">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.in">Vào</span>
-                <input id="insp-start"
-                  class="mono w-full h-7 px-2 py-1 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-                  type="text" inputmode="decimal" autocomplete="off" />
-              </label>
-              <label class="flex flex-col gap-1 min-w-0" for="insp-end">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.out">Ra</span>
-                <input id="insp-end"
-                  class="mono w-full h-7 px-2 py-1 border border-line rounded-sm bg-raised text-text text-[12px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-                  type="text" inputmode="decimal" autocomplete="off" />
-              </label>
-              <div class="flex flex-col gap-1 min-w-0">
-                <span class="text-muted text-[11px] font-medium" data-i18n="field.length">Dài</span>
-                <output id="insp-duration"
-                  class="mono flex items-center h-7 px-2 border border-line-soft rounded-sm bg-panel text-muted text-[12px]">0.000</output>
-              </div>
-            </div>
-
-            <div class="flex gap-1.5 shrink-0">
-              <button
-                class="tool flex flex-1 items-center justify-center gap-1.5 h-6.5 px-2 border border-line rounded-sm bg-raised text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi disabled:opacity-35"
-                id="mark-in" type="button" data-i18n-attr="title:action.markInTitle" title="Đặt điểm vào tại playhead (I)"><span
-                  class="mono px-1 rounded-[3px] bg-panel text-accent text-[10px]">I</span> <span data-i18n="action.markIn">Lấy vào</span></button>
-              <button
-                class="tool flex flex-1 items-center justify-center gap-1.5 h-6.5 px-2 border border-line rounded-sm bg-raised text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color,opacity] duration-120 enabled:hover:text-text enabled:hover:bg-raised-hi disabled:opacity-35"
-                id="mark-out" type="button" data-i18n-attr="title:action.markOutTitle" title="Đặt điểm ra tại playhead (O)"><span
-                  class="mono px-1 rounded-[3px] bg-panel text-accent text-[10px]">O</span> <span data-i18n="action.markOut">Lấy ra</span></button>
-            </div>
-
-            <label class="flex flex-col gap-1 min-w-0 shrink-0" for="insp-text">
-              <span class="text-muted text-[11px] font-medium" data-i18n="field.sourceText">Văn bản gốc</span>
-              <textarea id="insp-text"
-                class="w-full h-15 min-h-12 px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)] shrink-0"
-                spellcheck="false"></textarea>
-            </label>
-
-            <label class="flex flex-col gap-1 min-w-0 shrink-0" for="insp-translation">
-              <span class="text-muted text-[11px] font-medium" data-i18n="field.translationText">Bản dịch</span>
-              <textarea id="insp-translation"
-                class="w-full h-15 min-h-12 px-2 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] leading-normal resize-y outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus:border-accent focus:shadow-[0_0_0_2px_var(--color-accent-wash)] shrink-0"
-                spellcheck="false"></textarea>
-            </label>
-
-            <div class="grid grid-cols-3 gap-1.5 pt-0.5 shrink-0" id="meters">
-              <div class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel">
-                <span class="mono text-faint text-[9px] tracking-[0.09em]" data-i18n="meter.chars">KÝ TỰ</span>
-                <strong class="mono text-text-dim text-[13px] font-semibold" id="meter-chars">0</strong>
-              </div>
-              <div class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel"
-                id="meter-cps-wrap">
-                <span class="mono text-faint text-[9px] tracking-[0.09em]">CPS</span>
-                <strong class="mono text-text-dim text-[13px] font-semibold" id="meter-cps">0.0</strong>
-              </div>
-              <div class="meter grid gap-0.5 px-2 py-1.5 border border-line-soft rounded-sm bg-panel">
-                <span class="mono text-faint text-[9px] tracking-[0.09em]" data-i18n="meter.gap">KHOẢNG HỞ</span>
-                <strong class="mono text-text-dim text-[13px] font-semibold" id="meter-gap">—</strong>
-              </div>
-            </div>
-          </div>
-        </aside>
       </div>
 
-      <!-- ── Screen: projects dashboard ────────────────────────────── -->
-      <main class="screen absolute inset-0 overflow-hidden bg-ground" data-screen="projects" hidden>
-        <div class="h-full overflow-y-auto pt-6.5 px-[clamp(18px,4vw,44px)] pb-10">
-          <header class="max-w-360 mx-auto flex items-end justify-between gap-5 flex-wrap mb-5.5">
-            <div>
-              <h1 class="text-[26px] font-[650] tracking-[-0.02em]" data-i18n="dash.title">Dự án</h1>
-              <p class="mt-1 text-muted text-[12.5px]" data-i18n="dash.reading" id="dash-subtitle">Đang đọc workspace…</p>
-            </div>
-            <div class="flex items-center gap-2 max-dense:w-full">
-              <label
-                class="search-box flex items-center gap-1.75 h-8.5 px-2.5 border border-line rounded-sm bg-raised text-muted transition-[border-color] duration-120 focus-within:border-accent max-dense:flex-1"
-                for="dash-search">
-                <svg class="w-3.75 h-3.75 flex-none" aria-hidden="true" viewBox="0 0 24 24">
-                  <circle cx="11" cy="11" r="6.5" />
-                  <path d="m16 16 4 4" />
-                </svg>
-                <input class="w-47.5 max-dense:w-full border-0 bg-transparent text-text text-[12.5px] outline-none"
-                  id="dash-search" type="search" data-i18n-attr="placeholder:dash.searchPlaceholder" placeholder="Tìm theo tên file…" autocomplete="off" />
-              </label>
-              <button
-                class="flex items-center gap-2 h-8.5 px-2.5 rounded-sm bg-accent text-accent-ink text-[12.5px] font-[650] transition-[background-color,opacity] duration-130 enabled:hover:bg-accent-hi disabled:opacity-40"
-                id="dash-new" type="button">
-                <svg class="w-4 h-4 stroke-[1.9]" aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                <span class="flex-1 text-left" data-i18n="dash.new">Project mới</span>
-              </button>
-            </div>
-          </header>
+      <!-- ── Status bar ────────────────────────────────────────────── -->
+      <footer
+        class="flex items-center gap-3 h-(--h-status) px-3 border-t border-line-soft bg-panel text-muted text-[11px] select-none z-10 overflow-hidden"
+      >
+        <span
+          class="overflow-hidden text-ellipsis whitespace-nowrap text-text-dim"
+          data-i18n="status.ready"
+          id="status-message"
+          >Sẵn sàng</span
+        >
+        <span
+          class="w-px h-2.5 bg-line-soft flex-none"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]"
+          id="status-cues"
+          >0 cue</span
+        >
+        <span
+          class="w-px h-2.5 bg-line-soft flex-none"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]"
+          id="status-language"
+          >—</span
+        >
+        <span class="flex-1"></span>
+        <span
+          class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]"
+          id="status-zoom"
+          >60 px/s</span
+        >
+        <span
+          class="w-px h-2.5 bg-line-soft flex-none"
+          aria-hidden="true"
+        ></span>
+        <span
+          class="overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]"
+          data-i18n="status.storage"
+          id="status-storage"
+          >Workspace cục bộ</span
+        >
+      </footer>
 
-          <section class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5 mb-5"
-            data-i18n-attr="aria-label:dash.statsAria" aria-label="Tổng quan workspace">
-            <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
-              <span class="mono text-faint text-[9.5px] tracking-widest" data-i18n="stat.projects">PROJECT</span>
-              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]" id="stat-projects">0</strong>
-              <span class="text-muted text-[11px]" id="stat-projects-note">—</span>
-            </div>
-            <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
-              <span class="mono text-faint text-[9.5px] tracking-widest" data-i18n="stat.duration">THỜI LƯỢNG PHỤ ĐỀ</span>
-              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
-                id="stat-duration">0:00</strong>
-              <span class="text-muted text-[11px]" id="stat-duration-note">—</span>
-            </div>
-            <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
-              <span class="mono text-faint text-[9.5px] tracking-widest" data-i18n="stat.cues">CUE</span>
-              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]"
-                id="stat-cues-total">0</strong>
-              <span class="text-muted text-[11px]" id="stat-cues-note">—</span>
-            </div>
-            <div class="grid gap-0.75 px-3.75 py-3.25 border border-line-soft rounded-md bg-panel">
-              <span class="mono text-faint text-[9.5px] tracking-widest" data-i18n="stat.disk">DUNG LƯỢNG ĐĨA</span>
-              <strong class="mono text-text text-[22px] font-semibold tracking-[-0.02em]" id="stat-disk">0 MB</strong>
-              <span class="text-muted text-[11px]" id="stat-disk-note">—</span>
-            </div>
-          </section>
+      <div
+        class="progress-rail hidden fixed left-0 right-0 top-(--h-titlebar) z-30 items-center gap-2.5 h-6.5 px-3.5 border-b border-accent-line bg-[color-mix(in_srgb,var(--color-accent)_12%,var(--color-panel))] text-accent text-[11.5px] overflow-hidden"
+        id="progress-rail"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="progress-glow absolute inset-0"></span>
+        <span
+          class="relative flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+          data-i18n="run.default"
+          id="progress-copy"
+          >AI đang xử lý…</span
+        >
+        <button
+          id="cancel-job-btn"
+          class="relative flex items-center gap-1.5 h-5 px-2 border border-accent-line rounded-sm bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] text-accent text-[11px] font-[650] transition-[background-color,opacity] duration-120 enabled:hover:bg-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] disabled:opacity-55"
+          type="button"
+          data-i18n-attr="title:run.cancelTitle"
+          title="Dừng tiến trình đang chạy"
+        >
+          <svg class="w-3 h-3 stroke-2" aria-hidden="true" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="1.5" />
+          </svg>
+          <span data-i18n="action.cancel" id="cancel-job-label">Hủy</span>
+        </button>
+      </div>
 
-          <div class="max-w-360 mx-auto flex items-center justify-between gap-3.5 mb-3.5">
-            <div class="flex p-0.5 border border-line rounded-sm bg-raised" id="dash-filters" role="group"
-              data-i18n-attr="aria-label:dash.filtersAria" aria-label="Lọc project">
-              <button type="button"
-                class="seg is-active px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                data-filter="all" data-i18n="filter.all">Tất cả</button>
-              <button type="button"
-                class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                data-filter="translated" data-i18n="filter.translated">Đã dịch</button>
-              <button type="button"
-                class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                data-filter="untranslated" data-i18n="filter.untranslated">Chưa dịch</button>
-              <button type="button"
-                class="seg px-2 py-0.75 rounded-[3px] text-muted text-[11px] transition-[color,background-color] duration-120 hover:text-text"
-                data-filter="problem" data-i18n="filter.problem">Cần xem lại</button>
-            </div>
-            <span class="mono text-faint text-[11px]" id="dash-count">0 project</span>
-          </div>
+      <div
+        class="toast fixed right-4 bottom-9.5 z-40 max-w-95 px-3.25 py-2.5 border border-line border-l-[3px] border-l-muted rounded-md bg-raised shadow-pop text-[12px] opacity-0 translate-y-1.5 pointer-events-none transition-[opacity,translate] duration-160"
+        id="toast"
+        role="status"
+        aria-live="polite"
+      ></div>
 
-          <div class="max-w-360 mx-auto grid grid-cols-[repeat(auto-fill,minmax(236px,1fr))] gap-3.5" id="project-grid">
-          </div>
+      <div
+        class="drop-veil fixed inset-0 z-50 place-items-center bg-[color-mix(in_srgb,var(--color-ground)_78%,transparent)] backdrop-blur-[3px]"
+        id="drop-veil"
+        aria-hidden="true"
+      >
+        <div
+          class="grid justify-items-center gap-2 px-11.5 py-8.5 border-2 border-dashed border-accent-line rounded-lg bg-panel shadow-pop"
+        >
+          <svg
+            class="w-8.5 h-8.5 text-accent"
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M12 16V4M8 8l4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"
+            />
+          </svg>
+          <strong class="text-[15px]" data-i18n="drop.title"
+            >Thả file vào đây</strong
+          >
+          <small class="text-muted text-[12px]" data-i18n="drop.note"
+            >Video để nhận dạng · SRT/VTT để nhập phụ đề</small
+          >
+        </div>
+      </div>
 
-          <div class="max-w-360 mx-auto grid justify-items-center gap-1.75 px-5 py-14 text-muted text-center"
-            id="dash-empty" hidden>
-            <svg class="w-11 h-11 text-faint stroke-[1.3]" aria-hidden="true" viewBox="0 0 64 64">
-              <rect x="8" y="16" width="48" height="34" rx="7" />
-              <path d="M8 26h48M20 38h16" />
+      <dialog
+        class="confirm m-auto w-[min(440px,calc(100vw-40px))] p-5 border border-line rounded-lg bg-panel text-text shadow-pop"
+        id="confirm-dialog"
+      >
+        <h2
+          class="text-[15px] font-[650]"
+          data-i18n="confirm.title"
+          id="confirm-title"
+        >
+          Xác nhận
+        </h2>
+        <p
+          class="mt-2.5 px-2.5 py-2 border border-line-soft rounded-sm bg-raised text-[12.5px] wrap-anywhere"
+          id="confirm-target"
+        ></p>
+        <input
+          class="w-full h-7.5 mt-2.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)]"
+          id="confirm-input"
+          type="text"
+          hidden
+        />
+        <p
+          class="mt-2.5 text-muted text-[12px] leading-[1.55] whitespace-pre-line"
+          id="confirm-note"
+        ></p>
+        <div class="flex justify-end gap-2 mt-4">
+          <button
+            class="tool flex items-center gap-1.5 h-8 px-3 border border-line rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi"
+            data-i18n="action.cancel"
+            id="confirm-cancel"
+            type="button"
+          >
+            Hủy
+          </button>
+          <button
+            class="h-8 px-3.5 rounded-sm bg-crit text-white text-[12.5px] font-semibold transition-[filter] duration-120 hover:brightness-110"
+            data-i18n="action.agree"
+            id="confirm-ok"
+            type="button"
+          >
+            Đồng ý
+          </button>
+        </div>
+      </dialog>
+
+      <dialog
+        class="shortcuts m-auto w-[min(560px,calc(100vw-40px))] p-0 border border-line rounded-lg bg-panel text-text shadow-pop"
+        id="shortcuts-dialog"
+      >
+        <div
+          class="flex items-center justify-between px-4 py-3.5 border-b border-line-soft"
+        >
+          <h2 class="text-[14px] font-[650]" data-i18n="shortcuts.title">
+            Phím tắt
+          </h2>
+          <button
+            class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi hover:border-line"
+            id="shortcuts-close"
+            type="button"
+            data-i18n-attr="aria-label:action.close"
+            aria-label="Đóng"
+          >
+            <svg class="w-3.75 h-3.75" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m6 6 12 12M18 6 6 18" />
             </svg>
-            <p class="text-[14px] text-text-dim" data-i18n="dash.emptyTitle" id="dash-empty-title">Chưa có project nào</p>
-            <small class="text-[12px]" data-i18n="dash.emptyNote" id="dash-empty-note">Tạo phụ đề cho video đầu tiên để nó xuất hiện ở đây.</small>
+          </button>
+        </div>
+        <div
+          class="grid grid-cols-2 gap-y-1.5 gap-x-4.5 px-4 py-3.5 [&>div]:flex [&>div]:items-center [&>div]:gap-2.5 [&>div]:text-[12px] [&>div]:text-text-dim [&_kbd]:min-w-17 [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10.5px] [&_kbd]:text-center"
+        >
+          <div>
+            <kbd class="mono">Space</kbd
+            ><span data-i18n="shortcut.play">Phát / dừng</span>
+          </div>
+          <div>
+            <kbd class="mono">← →</kbd
+            ><span data-i18n="shortcut.frame">Lùi / tiến 1 frame</span>
+          </div>
+          <div>
+            <kbd class="mono">Shift ← →</kbd
+            ><span data-i18n="shortcut.second">Nhảy 1 giây</span>
+          </div>
+          <div>
+            <kbd class="mono">Ctrl ← →</kbd
+            ><span data-i18n="shortcut.cue">Cue trước / cue sau</span>
+          </div>
+          <div>
+            <kbd class="mono">Ctrl Z</kbd
+            ><span data-i18n="shortcut.undo">Hoàn tác</span>
+          </div>
+          <div>
+            <kbd class="mono">Ctrl Y</kbd
+            ><span data-i18n="shortcut.redo">Làm lại</span>
+          </div>
+          <div>
+            <kbd class="mono">A</kbd
+            ><span data-i18n="shortcut.addCue">Thêm cue tại playhead</span>
+          </div>
+          <div>
+            <kbd class="mono">S</kbd
+            ><span data-i18n="shortcut.splitCue">Cắt cue tại playhead</span>
+          </div>
+          <div>
+            <kbd class="mono">G</kbd
+            ><span data-i18n="shortcut.mergeCue">Gộp với cue kế tiếp</span>
+          </div>
+          <div>
+            <kbd class="mono">Delete</kbd
+            ><span data-i18n="shortcut.deleteCue">Xóa cue đang chọn</span>
+          </div>
+          <div>
+            <kbd class="mono">I / O</kbd
+            ><span data-i18n="shortcut.markPoints">Lấy điểm vào / ra</span>
+          </div>
+          <div>
+            <kbd class="mono">N</kbd
+            ><span data-i18n="shortcut.snap">Bật tắt hít dính</span>
+          </div>
+          <div>
+            <kbd class="mono">F</kbd
+            ><span data-i18n="shortcut.fit">Timeline vừa khung</span>
+          </div>
+          <div>
+            <kbd class="mono">+ −</kbd
+            ><span data-i18n="shortcut.zoom">Phóng to / thu nhỏ</span>
+          </div>
+          <div>
+            <kbd class="mono">M</kbd
+            ><span data-i18n="shortcut.mute">Tắt tiếng</span>
+          </div>
+          <div>
+            <kbd class="mono">Ctrl ↵</kbd
+            ><span data-i18n="shortcut.run">Chạy nhận dạng AI</span>
           </div>
         </div>
-      </main>
+        <p
+          class="px-4 pb-4 text-muted text-[11.5px] leading-[1.6] [&_kbd]:px-1 [&_kbd]:py-px [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10px]"
+          data-i18n-html="shortcuts.footnote"
+        >
+          Trên timeline: kéo thân clip để dời, kéo mép để co giãn, kéo thước để
+          tua. Giữ
+          <kbd class="mono">Ctrl</kbd> khi lăn chuột để phóng. Đang phát mà kéo
+          thì video tạm dừng và tự chạy tiếp khi thả chuột.
+        </p>
+      </dialog>
     </div>
-
-    <!-- ── Status bar ────────────────────────────────────────────── -->
-    <footer
-      class="flex items-center gap-3 h-(--h-status) px-3 border-t border-line-soft bg-panel text-muted text-[11px] select-none z-10 overflow-hidden">
-      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-text-dim" data-i18n="status.ready" id="status-message">Sẵn sàng</span>
-      <span class="w-px h-2.5 bg-line-soft flex-none" aria-hidden="true"></span>
-      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-cues">0 cue</span>
-      <span class="w-px h-2.5 bg-line-soft flex-none" aria-hidden="true"></span>
-      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-language">—</span>
-      <span class="flex-1"></span>
-      <span class="mono overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" id="status-zoom">60 px/s</span>
-      <span class="w-px h-2.5 bg-line-soft flex-none" aria-hidden="true"></span>
-      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[10.5px]" data-i18n="status.storage" id="status-storage">Workspace cục bộ</span>
-    </footer>
-
-    <div
-      class="progress-rail hidden fixed left-0 right-0 top-(--h-titlebar) z-30 items-center gap-2.5 h-6.5 px-3.5 border-b border-accent-line bg-[color-mix(in_srgb,var(--color-accent)_12%,var(--color-panel))] text-accent text-[11.5px] overflow-hidden"
-      id="progress-rail" role="status" aria-live="polite">
-      <span class="progress-glow absolute inset-0"></span>
-      <span class="relative flex-1 overflow-hidden text-ellipsis whitespace-nowrap" data-i18n="run.default" id="progress-copy">AI đang xử lý…</span>
-      <button id="cancel-job-btn"
-        class="relative flex items-center gap-1.5 h-5 px-2 border border-accent-line rounded-sm bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] text-accent text-[11px] font-[650] transition-[background-color,opacity] duration-120 enabled:hover:bg-[color-mix(in_srgb,var(--color-accent)_20%,transparent)] disabled:opacity-55"
-        type="button" data-i18n-attr="title:run.cancelTitle" title="Dừng tiến trình đang chạy">
-        <svg class="w-3 h-3 stroke-2" aria-hidden="true" viewBox="0 0 24 24">
-          <rect x="6" y="6" width="12" height="12" rx="1.5" />
-        </svg>
-        <span data-i18n="action.cancel" id="cancel-job-label">Hủy</span>
-      </button>
-    </div>
-
-    <div
-      class="toast fixed right-4 bottom-9.5 z-40 max-w-95 px-3.25 py-2.5 border border-line border-l-[3px] border-l-muted rounded-md bg-raised shadow-pop text-[12px] opacity-0 translate-y-1.5 pointer-events-none transition-[opacity,translate] duration-160"
-      id="toast" role="status" aria-live="polite"></div>
-
-    <div
-      class="drop-veil fixed inset-0 z-50 place-items-center bg-[color-mix(in_srgb,var(--color-ground)_78%,transparent)] backdrop-blur-[3px]"
-      id="drop-veil" aria-hidden="true">
-      <div
-        class="grid justify-items-center gap-2 px-11.5 py-8.5 border-2 border-dashed border-accent-line rounded-lg bg-panel shadow-pop">
-        <svg class="w-8.5 h-8.5 text-accent" aria-hidden="true" viewBox="0 0 24 24">
-          <path d="M12 16V4M8 8l4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
-        </svg>
-        <strong class="text-[15px]" data-i18n="drop.title">Thả file vào đây</strong>
-        <small class="text-muted text-[12px]" data-i18n="drop.note">Video để nhận dạng · SRT/VTT để nhập phụ đề</small>
-      </div>
-    </div>
-
-    <dialog
-      class="confirm m-auto w-[min(440px,calc(100vw-40px))] p-5 border border-line rounded-lg bg-panel text-text shadow-pop"
-      id="confirm-dialog">
-      <h2 class="text-[15px] font-[650]" data-i18n="confirm.title" id="confirm-title">Xác nhận</h2>
-      <p class="mt-2.5 px-2.5 py-2 border border-line-soft rounded-sm bg-raised text-[12.5px] wrap-anywhere"
-        id="confirm-target"></p>
-      <input
-        class="w-full h-7.5 mt-2.5 pl-2 pr-1.5 py-1.5 border border-line rounded-sm bg-raised text-text text-[12.5px] outline-none transition-[border-color,background-color] duration-120 hover:border-faint focus-visible:border-accent focus-visible:shadow-[0_0_0_2px_var(--color-accent-wash)]"
-        id="confirm-input" type="text" hidden>
-      <p class="mt-2.5 text-muted text-[12px] leading-[1.55] whitespace-pre-line" id="confirm-note"></p>
-      <div class="flex justify-end gap-2 mt-4">
-        <button
-          class="tool flex items-center gap-1.5 h-8 px-3 border border-line rounded-sm text-text-dim text-[11.5px] whitespace-nowrap transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi"
-          data-i18n="action.cancel" id="confirm-cancel" type="button">Hủy</button>
-        <button
-          class="h-8 px-3.5 rounded-sm bg-crit text-white text-[12.5px] font-semibold transition-[filter] duration-120 hover:brightness-110"
-          data-i18n="action.agree" id="confirm-ok" type="button">Đồng ý</button>
-      </div>
-    </dialog>
-
-    <dialog
-      class="shortcuts m-auto w-[min(560px,calc(100vw-40px))] p-0 border border-line rounded-lg bg-panel text-text shadow-pop"
-      id="shortcuts-dialog">
-      <div class="flex items-center justify-between px-4 py-3.5 border-b border-line-soft">
-        <h2 class="text-[14px] font-[650]" data-i18n="shortcuts.title">Phím tắt</h2>
-        <button
-          class="tool w-6.5 h-6.5 flex items-center justify-center border border-transparent rounded-sm text-text-dim transition-[color,background-color,border-color] duration-120 hover:text-text hover:bg-raised-hi hover:border-line"
-          id="shortcuts-close" type="button" data-i18n-attr="aria-label:action.close" aria-label="Đóng"><svg class="w-3.75 h-3.75" aria-hidden="true"
-            viewBox="0 0 24 24">
-            <path d="m6 6 12 12M18 6 6 18" />
-          </svg></button>
-      </div>
-      <div
-        class="grid grid-cols-2 gap-y-1.5 gap-x-4.5 px-4 py-3.5 [&>div]:flex [&>div]:items-center [&>div]:gap-2.5 [&>div]:text-[12px] [&>div]:text-text-dim [&_kbd]:min-w-17 [&_kbd]:px-1.5 [&_kbd]:py-0.5 [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10.5px] [&_kbd]:text-center">
-        <div><kbd class="mono">Space</kbd><span data-i18n="shortcut.play">Phát / dừng</span></div>
-        <div><kbd class="mono">← →</kbd><span data-i18n="shortcut.frame">Lùi / tiến 1 frame</span></div>
-        <div><kbd class="mono">Shift ← →</kbd><span data-i18n="shortcut.second">Nhảy 1 giây</span></div>
-        <div><kbd class="mono">Ctrl ← →</kbd><span data-i18n="shortcut.cue">Cue trước / cue sau</span></div>
-        <div><kbd class="mono">Ctrl Z</kbd><span data-i18n="shortcut.undo">Hoàn tác</span></div>
-        <div><kbd class="mono">Ctrl Y</kbd><span data-i18n="shortcut.redo">Làm lại</span></div>
-        <div><kbd class="mono">A</kbd><span data-i18n="shortcut.addCue">Thêm cue tại playhead</span></div>
-        <div><kbd class="mono">S</kbd><span data-i18n="shortcut.splitCue">Cắt cue tại playhead</span></div>
-        <div><kbd class="mono">G</kbd><span data-i18n="shortcut.mergeCue">Gộp với cue kế tiếp</span></div>
-        <div><kbd class="mono">Delete</kbd><span data-i18n="shortcut.deleteCue">Xóa cue đang chọn</span></div>
-        <div><kbd class="mono">I / O</kbd><span data-i18n="shortcut.markPoints">Lấy điểm vào / ra</span></div>
-        <div><kbd class="mono">N</kbd><span data-i18n="shortcut.snap">Bật tắt hít dính</span></div>
-        <div><kbd class="mono">F</kbd><span data-i18n="shortcut.fit">Timeline vừa khung</span></div>
-        <div><kbd class="mono">+ −</kbd><span data-i18n="shortcut.zoom">Phóng to / thu nhỏ</span></div>
-        <div><kbd class="mono">M</kbd><span data-i18n="shortcut.mute">Tắt tiếng</span></div>
-        <div><kbd class="mono">Ctrl ↵</kbd><span data-i18n="shortcut.run">Chạy nhận dạng AI</span></div>
-      </div>
-      <p
-        class="px-4 pb-4 text-muted text-[11.5px] leading-[1.6] [&_kbd]:px-1 [&_kbd]:py-px [&_kbd]:border [&_kbd]:border-line [&_kbd]:border-b-2 [&_kbd]:rounded-[4px] [&_kbd]:bg-raised [&_kbd]:text-text [&_kbd]:text-[10px]" data-i18n-html="shortcuts.footnote">
-        Trên timeline: kéo thân clip để dời, kéo mép để co giãn, kéo thước để tua. Giữ <kbd class="mono">Ctrl</kbd> khi
-        lăn chuột để phóng. Đang phát mà kéo thì video tạm dừng và tự chạy tiếp khi thả chuột.</p>
-    </dialog>
-  </div>
-</body>
-
+  </body>
 </html>

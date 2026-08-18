@@ -1055,6 +1055,59 @@ def test_translation_style_is_stored_on_the_job_and_survives_a_reload(monkeypatc
         cleanup(job["id"])
 
 
+def test_a_job_remembers_which_saved_style_it_was_translated_with(monkeypatch):
+    """The picker has to be able to show the name again, not just the preset."""
+
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="wuxia.srt",
+        cues=[{"id": 1, "start": 0, "end": 1, "text": "大哥", "translation": ""}],
+    )
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={
+                "target_language": "Tiếng Việt",
+                "style": "han_viet",
+                "style_notes": "陛下 → bệ hạ",
+                "style_ref": "0456201160fc",
+            },
+        )
+        assert response.status_code == 200, response.text
+        wait_for_status(job["id"], timeout=10.0)
+        assert client.get(f"/api/jobs/{job['id']}").json()["translation_style_ref"] == (
+            "0456201160fc"
+        )
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_style_reference_that_could_never_name_one_is_dropped_not_refused(monkeypatch):
+    """It names a shortcut. Rubbish there must not cost anyone a translation."""
+
+    monkeypatch.setattr(
+        ai_module, "settings", replace(ai_module.settings, translation_provider="mock")
+    )
+    job = make_job(
+        "subtitle_import",
+        subtitle_name="styled.srt",
+        cues=[{"id": 1, "start": 0, "end": 1, "text": "one", "translation": ""}],
+    )
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/translate",
+            json={"target_language": "Tiếng Việt", "style_ref": "../../etc/passwd"},
+        )
+        assert response.status_code == 200, response.text
+        wait_for_status(job["id"], timeout=10.0)
+        assert client.get(f"/api/jobs/{job['id']}").json()["translation_style_ref"] == ""
+    finally:
+        cleanup(job["id"])
+
+
 def test_an_unknown_style_is_refused_rather_than_silently_ignored():
     job = make_job(
         "subtitle_import",

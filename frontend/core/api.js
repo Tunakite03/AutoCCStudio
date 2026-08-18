@@ -85,6 +85,7 @@ export const api = {
     provider = "",
     model = "",
     fromCue = 0,
+    styleRef = "",
   ) =>
     request(`/api/jobs/${jobId}/translate`, {
       method: "POST",
@@ -96,6 +97,7 @@ export const api = {
         provider,
         model,
         from_cue: fromCue,
+        style_ref: styleRef,
       }),
     }),
 

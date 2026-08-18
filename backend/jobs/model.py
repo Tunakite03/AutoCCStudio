@@ -165,6 +165,7 @@ def public_job(job: dict) -> dict:
         "translation_model": job.get("translation_model"),
         "translation_style": job.get("translation_style"),
         "translation_style_notes": job.get("translation_style_notes"),
+        "translation_style_ref": job.get("translation_style_ref"),
         "dubbing_status": job.get("dubbing_status"),
         "dubbing_error": job.get("dubbing_error"),
         "dubbing_report": job.get("dubbing_report"),

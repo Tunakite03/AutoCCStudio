@@ -329,7 +329,7 @@ const translatedCount = () => cues().filter((cue) => (cue.translation || "").tri
  *  instead of something you pay for twice. */
 async function runTranslation(fromCue) {
   try {
-    const { style, notes } = styleRequest();
+    const { style, notes, ref } = styleRequest();
     const job = await api.translate(
       state.job.id,
       $("#target-language").value,
@@ -338,6 +338,7 @@ async function runTranslation(fromCue) {
       $("#translation-provider").value,
       $("#translation-model").value,
       fromCue,
+      ref,
     );
     adoptJob(job, { keepSelection: true });
     toast(
@@ -700,12 +701,14 @@ function selectedSavedStyle() {
     : null;
 }
 
-/** What the translate call actually sends: a preset key and the rules box. */
+/** What the translate call actually sends: a preset key and the rules box.
+ *  `ref` only names the shortcut, so the picker can show it again later. */
 function styleRequest() {
   const saved = selectedSavedStyle();
   return {
     style: saved ? saved.base : $("#translation-style").value,
     notes: $("#translation-style-notes").value,
+    ref: saved ? saved.id : "",
   };
 }
 
@@ -879,20 +882,48 @@ async function deleteStyle() {
   }
 }
 
-/** Show a reopened project the style, provider and model it was actually translated with. */
-function restoreTranslationFromJob() {
+// The last project these controls were filled in from. `job:loaded` fires on
+// every progress tick as well as on opening a project, and re-applying a running
+// job's settings each tick pulled the style picker and the rules box out from
+// under anyone who was in the middle of changing them.
+let restoredJobId = null;
+
+/**
+ * Show a reopened project the style, provider and model it was actually
+ * translated with — once per project, not once per tick.
+ *
+ * `force` is for the boot race: the project can be adopted before the pickers
+ * have their options, and the second pass has to be allowed to finish the job.
+ */
+function restoreTranslationFromJob({ force = false } = {}) {
   const job = state.job;
   if (!job) return;
+  // Not gated: recognition reports the language it heard partway through a run,
+  // and the picker has to follow it the moment it lands.
+  adoptDetectedLanguage(job);
+  if (!force && job.id === restoredJobId) return;
+  restoredJobId = job.id;
+
   const styleSelect = $("#translation-style");
-  if (job.translation_style && [...styleSelect.options].some((o) => o.value === job.translation_style)) {
-    styleSelect.value = job.translation_style;
+  // The saved style it was translated with, when that style is still around;
+  // otherwise the preset underneath, which is what actually did the work.
+  const savedKey = job.translation_style_ref && savedStyleById(job.translation_style_ref)
+    ? SAVED_PREFIX + job.translation_style_ref
+    : "";
+  const wanted = savedKey || job.translation_style;
+  if (wanted && [...styleSelect.options].some((o) => o.value === wanted)) {
+    styleSelect.value = wanted;
   }
   if (typeof job.translation_style_notes === "string") {
     $("#translation-style-notes").value = job.translation_style_notes;
   }
-  // These rules came from the project, not from a style this session applied,
-  // so treat them as the user's own: nothing may overwrite them unasked.
-  appliedStyleNotes = null;
+  // Rules that still match the style they came from may be replaced silently by
+  // the next pick; anything else is treated as hand-written and is asked about.
+  const saved = selectedSavedStyle();
+  appliedStyleNotes =
+    saved && saved.notes.trim() === (job.translation_style_notes || "").trim()
+      ? saved.notes
+      : null;
   lastStyleValue = styleSelect.value;
   refreshStyleButtons();
   const providerSelect = $("#translation-provider");
@@ -902,18 +933,22 @@ function restoreTranslationFromJob() {
   } else if (job.translation_model) {
     syncTranslationModelOptions(job.translation_model);
   }
-  const sourceLang = job.source_language || job.detected_language;
-  const sourceLangSelect = $("#source-language");
-  if (sourceLang && [...sourceLangSelect.options].some((o) => o.value === sourceLang)) {
-    sourceLangSelect.value = sourceLang;
-    // Reopening a project restores a language the user never confirmed here.
-    acknowledgedLanguage = "";
-  }
   // A reopened project brings its own detected language, so the clash the user
   // acknowledged on the previous project says nothing about this one.
   acknowledgedTarget = "";
-  syncLanguageHint();
   syncTargetHint();
+}
+
+/** Put the language the engine actually heard into the picker. */
+function adoptDetectedLanguage(job) {
+  const sourceLang = job.source_language || job.detected_language;
+  const select = $("#source-language");
+  if (!sourceLang || select.value === sourceLang) return;
+  if (![...select.options].some((option) => option.value === sourceLang)) return;
+  select.value = sourceLang;
+  // A language the run reported is not one the user confirmed here.
+  acknowledgedLanguage = "";
+  syncLanguageHint();
 }
 
 export async function loadCapabilities() {
@@ -939,7 +974,7 @@ export async function loadCapabilities() {
     $("#dub-shorten").checked = Boolean(capabilities.dub_shorten_with_llm);
     $("#dub-shorten").disabled = !capabilities.dub_shorten_with_llm;
     renderGainValue();
-    restoreTranslationFromJob();
+    restoreTranslationFromJob({ force: true });
     renderCapabilityNote(capabilities);
   } catch {
     $("#capability-note").textContent = t("capability.unreadable");
@@ -1031,7 +1066,7 @@ export function mountPipeline() {
     muxVideo($("#dub-keep-original").checked ? "both" : "dubbed"),
   );
 
-  on("job:loaded", restoreTranslationFromJob);
+  on("job:loaded", () => restoreTranslationFromJob());
   // Every SSE tick re-adopts the job, so this is also how the preview appears
   // the moment a running dub finishes.
   on("job:loaded", renderDubState);
