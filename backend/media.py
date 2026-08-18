@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import wave
 from array import array
 from pathlib import Path
 
@@ -275,3 +276,291 @@ def mux_soft_subtitles(video_path: Path, subtitle_path: Path, destination: Path)
         raise FFmpegError("err.ffmpeg.noMuxedVideo")
     return destination
 
+
+
+# ── Dubbing ──────────────────────────────────────────────────────────
+
+OP_DUB_DECODE = Message("op.dubDecode")
+OP_DUB_MIX = Message("op.dubMix")
+
+# Edge's neural voices come back at 24 kHz mono. Resampling higher would invent
+# detail the source never had, so the whole dub pipeline stays at that rate.
+DUB_SAMPLE_RATE = 24000
+DUB_SAMPLE_WIDTH = 2
+DUB_DECODE_TIMEOUT_SECONDS = 180
+DUB_MIX_TIMEOUT_SECONDS = 1800
+
+
+def run_ffmpeg_binary(arguments: list[str], *, timeout: int, operation: Message,
+                      stdin_bytes: bytes | None = None) -> bytes:
+    """Run ffmpeg for its stdout. Same failure handling as `run_ffmpeg`.
+
+    Separate because `run_ffmpeg` decodes output as text, which mangles PCM.
+    """
+
+    command = [require_ffmpeg(), "-y", "-v", "error", *arguments]
+    try:
+        result = subprocess.run(
+            command,
+            input=stdin_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        logger.warning("%s: ffmpeg timed out after %ss", operation, timeout)
+        raise FFmpegError(
+            "err.ffmpeg.timeout", timed_out=True, operation=operation, seconds=timeout
+        ) from exc
+    except OSError as exc:
+        logger.warning("%s: ffmpeg could not be launched: %s", operation, exc)
+        raise FFmpegError(
+            "err.ffmpeg.launchFailed", operation=operation, cause=str(exc)
+        ) from exc
+
+    if result.returncode != 0:
+        detail = (result.stderr or b"").decode("utf-8", errors="replace").strip()[-1500:]
+        logger.warning("%s: ffmpeg exited %s: %s", operation, result.returncode, detail)
+        raise FFmpegError("err.ffmpeg.failed", operation=operation, detail=detail)
+    return result.stdout or b""
+
+
+def atempo_chain(tempo: float) -> list[str]:
+    """`atempo` only accepts 0.5–2.0, so anything outside is a chain of stages."""
+
+    factor = max(0.05, float(tempo))
+    stages: list[float] = []
+    while factor > 2.0:
+        stages.append(2.0)
+        factor /= 2.0
+    while factor < 0.5:
+        stages.append(0.5)
+        factor /= 0.5
+    stages.append(factor)
+    return [f"atempo={stage:.6f}" for stage in stages]
+
+
+def decode_to_pcm(source: Path) -> bytes:
+    """Decode any audio file to raw mono s16le at DUB_SAMPLE_RATE.
+
+    Raw PCM rather than a container because the assembler places segments by
+    sample offset: a length in bytes is a length in samples, with no header to
+    account for and no second decode to find out how long a clip really is.
+
+    Always at natural speed. A line is measured before anything is decided about
+    it, and `retime_pcm` applies the decision afterwards — to the cached PCM, so
+    a re-run that lands on a different tempo does not re-synthesise the line.
+    """
+
+    return run_ffmpeg_binary(
+        [
+            "-i", str(source),
+            "-vn", "-ac", "1", "-ar", str(DUB_SAMPLE_RATE), "-f", "s16le", "-",
+        ],
+        timeout=DUB_DECODE_TIMEOUT_SECONDS,
+        operation=OP_DUB_DECODE,
+    )
+
+
+def retime_pcm(pcm: bytes, *, tempo: float) -> bytes:
+    """Speed raw PCM up (or down) without re-synthesising or re-decoding a file."""
+
+    if abs(tempo - 1.0) <= 1e-3 or not pcm:
+        return pcm
+    arguments = [
+        "-f", "s16le", "-ar", str(DUB_SAMPLE_RATE), "-ac", "1", "-i", "pipe:0",
+        "-filter:a", ",".join(atempo_chain(tempo)),
+        "-f", "s16le", "-",
+    ]
+    return run_ffmpeg_binary(
+        arguments,
+        timeout=DUB_DECODE_TIMEOUT_SECONDS,
+        operation=OP_DUB_DECODE,
+        stdin_bytes=pcm,
+    )
+
+
+def pcm_seconds(pcm: bytes, sample_rate: int = DUB_SAMPLE_RATE) -> float:
+    return len(pcm) / (DUB_SAMPLE_WIDTH * sample_rate)
+
+
+# Of 32768. Low enough to keep a breathy consonant, high enough to read encoder
+# noise as the silence it is.
+DUB_SILENCE_THRESHOLD = 600
+DUB_SILENCE_BLOCK_MS = 10
+# Padding left around the speech, so a plosive is not clipped off its own word.
+DUB_SILENCE_KEEP_MS = 40
+
+
+def trim_silence(
+    pcm: bytes,
+    *,
+    sample_rate: int = DUB_SAMPLE_RATE,
+    threshold: int = DUB_SILENCE_THRESHOLD,
+    keep_ms: int = DUB_SILENCE_KEEP_MS,
+) -> bytes:
+    """Cut the silence a synthesiser pads its output with.
+
+    This is not a nicety. Edge returns roughly 0.2s of lead-in and up to 1.1s of
+    tail on *every* utterance, so "Gì cơ?" — half a second of speech — arrives as
+    1.8 seconds. Measured untrimmed, a two-word line looks too long for a
+    two-second cue, and the fitting stage then speeds up, spills and finally
+    spends an LLM call solving a problem that was never in the text.
+
+    Scanned in 10ms blocks with `min`/`max` over an `array` slice rather than
+    sample by sample: same answer, and it stays in C for the thousand segments a
+    feature-length project brings.
+    """
+
+    block = max(1, sample_rate * DUB_SILENCE_BLOCK_MS // 1000)
+    samples = array("h")
+    samples.frombytes(pcm[: len(pcm) - (len(pcm) % DUB_SAMPLE_WIDTH)])
+    count = len(samples)
+
+    first: int | None = None
+    last = 0
+    for start in range(0, count, block):
+        chunk = samples[start : start + block]
+        if not chunk:
+            break
+        if max(abs(min(chunk)), abs(max(chunk))) > threshold:
+            if first is None:
+                first = start
+            last = start + len(chunk)
+    if first is None:
+        # Nothing above the floor: the provider answered with silence, which the
+        # caller treats as a line it failed to voice.
+        return b""
+
+    keep = sample_rate * keep_ms // 1000
+    return samples[max(0, first - keep) : min(count, last + keep)].tobytes()
+
+
+def write_wav(destination: Path, pcm: bytes, sample_rate: int = DUB_SAMPLE_RATE) -> Path:
+    """Wrap raw PCM in a WAV header. No ffmpeg: the header is 44 known bytes."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(destination), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(DUB_SAMPLE_WIDTH)
+        handle.setframerate(sample_rate)
+        handle.writeframes(pcm)
+    return destination
+
+
+def encode_audio(source: Path, destination: Path, *, bitrate: str = "192k") -> Path:
+    """Re-encode audio to AAC — a track a browser will play and mp4 will hold.
+
+    The assembled dub is a WAV, which is right for sample-exact assembly and
+    wrong for everything after it: a feature-length one is hundreds of megabytes
+    to stream to a preview player, and mp4 will not carry it at all.
+    """
+
+    run_ffmpeg(
+        ["-i", str(source), "-vn", "-c:a", "aac", "-b:a", bitrate, str(destination)],
+        timeout=DUB_MIX_TIMEOUT_SECONDS,
+        operation=OP_DUB_MIX,
+    )
+    if not destination.exists():
+        raise FFmpegError("err.ffmpeg.noDubTrack")
+    return destination
+
+
+def has_audio_stream(media_path: Path) -> bool:
+    """Whether the container carries audio at all.
+
+    Asked before mixing: `amix` on a video with no audio track fails with an
+    ffmpeg stream-mapping error, which reads to a user as "the dub is broken"
+    rather than "this video is silent".
+    """
+
+    try:
+        import av
+    except ImportError:
+        # Without PyAV, assume there is audio and let ffmpeg be the judge.
+        return True
+
+    try:
+        with av.open(str(media_path)) as container:
+            return any(stream.type == "audio" for stream in container.streams)
+    except Exception as exc:
+        logger.info("could not probe audio streams of %s: %s", media_path.name, exc)
+        return True
+
+
+def mix_dub_over_original(
+    video_path: Path,
+    dub_path: Path,
+    destination: Path,
+    *,
+    original_gain: float,
+) -> Path:
+    """Lay the dub over the original audio, ducked to `original_gain`.
+
+    A fixed gain rather than sidechain ducking on purpose: the result is the
+    same on every run, and `sidechaincompress` is not in every ffmpeg build —
+    including some of the ones `imageio-ffmpeg` ships as the fallback binary.
+    """
+
+    gain = min(max(float(original_gain), 0.0), 1.0)
+    if not has_audio_stream(video_path):
+        # A silent video is a legitimate input — a slideshow, a screen capture.
+        # There is nothing to duck, so the dub simply becomes the audio.
+        return encode_audio(dub_path, destination)
+
+    run_ffmpeg(
+        [
+            "-i", str(video_path),
+            "-i", str(dub_path),
+            "-filter_complex",
+            f"[0:a]volume={gain:.3f}[bed];"
+            "[bed][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]",
+            "-map", "[out]",
+            "-c:a", "aac", "-b:a", "192k",
+            str(destination),
+        ],
+        timeout=DUB_MIX_TIMEOUT_SECONDS,
+        operation=OP_DUB_MIX,
+    )
+    if not destination.exists():
+        raise FFmpegError("err.ffmpeg.noDubTrack")
+    return destination
+
+
+def mux_dubbed_video(
+    video_path: Path,
+    dub_audio_path: Path,
+    subtitle_path: Path | None,
+    destination: Path,
+    *,
+    keep_original_audio: bool,
+) -> Path:
+    """Rebuild the MP4 around the dubbed audio, copying every stream.
+
+    The dub is mapped first so a player that just takes the default track plays
+    the dub; the original follows it when the caller wants both.
+    """
+
+    arguments = ["-i", str(video_path), "-i", str(dub_audio_path)]
+    if subtitle_path is not None:
+        arguments += ["-i", str(subtitle_path)]
+    arguments += ["-map", "0:v:0", "-map", "1:a:0"]
+    if keep_original_audio:
+        arguments += ["-map", "0:a:0?"]
+    if subtitle_path is not None:
+        arguments += ["-map", "2:0"]
+    arguments += ["-c:v", "copy", "-c:a", "copy"]
+    if subtitle_path is not None:
+        arguments += ["-c:s", "mov_text"]
+    arguments += [
+        "-disposition:a:0", "default",
+        "-metadata:s:a:0", "title=Dub",
+    ]
+    if keep_original_audio:
+        arguments += ["-disposition:a:1", "0", "-metadata:s:a:1", "title=Original"]
+    arguments.append(str(destination))
+
+    run_ffmpeg(arguments, timeout=MUX_TIMEOUT_SECONDS, operation=OP_MUX)
+    if not destination.exists():
+        raise FFmpegError("err.ffmpeg.noMuxedVideo")
+    return destination

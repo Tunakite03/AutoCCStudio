@@ -89,8 +89,11 @@ export function createTimeline({
     const startTime = Math.floor(xToTime(offset) / minor) * minor;
     const endTime = xToTime(offset + width);
 
-    rulerCtx.strokeStyle = cssVar("--grid-line-strong");
-    rulerCtx.fillStyle = cssVar("--muted");
+    // Token names are `--color-*`; asking for `--grid-line-strong` returns "",
+    // and assigning "" to strokeStyle is *ignored* rather than an error, so the
+    // context silently keeps the canvas default — black on a black ruler.
+    rulerCtx.strokeStyle = cssVar("--color-grid-line-strong");
+    rulerCtx.fillStyle = cssVar("--color-muted");
     rulerCtx.font = `10px ${cssVar("--font-mono") || "monospace"}`;
     rulerCtx.textBaseline = "alphabetic";
     rulerCtx.lineWidth = 1;
@@ -117,7 +120,7 @@ export function createTimeline({
     const offset = scroller.scrollLeft;
     const middle = height / 2;
     const { peaks, resolution } = waveform;
-    waveCtx.fillStyle = cssVar("--wave");
+    waveCtx.fillStyle = cssVar("--color-wave");
 
     for (let x = 0; x < width; x += 1) {
       const from = Math.floor(xToTime(offset + x) * resolution);

@@ -66,10 +66,31 @@ export const vi = {
   "field.styleNotes": "Quy tắc riêng",
   "field.styleNotesPlaceholder":
     "Mỗi dòng một ý. Thuật ngữ: 大哥 → đại ca\nCòn lại viết như một yêu cầu: giọng trẻ, không dùng từ Hán Việt nặng",
+  "action.saveStyle": "Lưu thành phong cách…",
+  "action.deleteStyle": "Xóa phong cách đã lưu",
   "action.translateAll": "Dịch toàn bộ cue",
   "action.retranslateAll": "Dịch lại toàn bộ",
   "action.translateFrom": "Dịch từ cue đang chọn",
   "action.translateFromCue": "Dịch từ cue {cue} trở đi",
+  "section.dub": "Lồng tiếng",
+  "field.voice": "Giọng đọc",
+  "field.dubOriginalGain": "Tiếng gốc còn lại",
+  "dub.gainValue": "{percent}%",
+  "dub.shorten": "Cho AI rút gọn câu quá dài",
+  "dub.shortenNote":
+    "Câu nào đọc không kịp sẽ được LLM viết ngắn lại rồi thu lại. Tắt đi thì câu đó bị đọc nhanh hơn.",
+  "dub.keepOriginalTrack": "Giữ tiếng gốc thành track phụ khi xuất",
+  "dub.preview": "Nghe thử bản lồng tiếng",
+  "dub.previewHint": "Video sẽ tự tắt tiếng khi nghe thử",
+  "dub.noPreview": "Chưa có bản lồng tiếng nào",
+  "dub.report": "Đã lồng tiếng {voiced}/{total} câu",
+  "dub.reportFits": " · đọc nhanh {spedUp} · tràn {spill} · rút gọn {shortened}",
+  "dub.reportOverflow": " · {count} câu vẫn quá dài",
+  "dub.stale":
+    "Phụ đề đã đổi sau lần lồng tiếng gần nhất — bản thu hiện tại đã cũ. Lồng tiếng lại để khớp; những câu không đổi vẫn dùng lại bản cũ.",
+  "action.dub": "Lồng tiếng toàn bộ",
+  "action.redub": "Lồng tiếng lại",
+  "action.muxDubbed": "Xuất MP4 lồng tiếng",
   "section.export": "Xuất",
   "export.source": "Bản gốc",
   "export.translated": "Bản dịch",
@@ -78,7 +99,7 @@ export const vi = {
   "capability.checking": "Đang kiểm tra hệ thống…",
   "capability.unreadable": "Không đọc được cấu hình backend.",
   "capability.note":
-    "Deepgram: {deepgram} · Whisper: {whisper} · AI lượt thoại: {dialogue} · Dịch: {translation} · ffmpeg: {ffmpeg}",
+    "Deepgram: {deepgram} · Whisper: {whisper} · AI lượt thoại: {dialogue} · Dịch: {translation} · Lồng tiếng: {dub} · ffmpeg: {ffmpeg}",
   "capability.notInstalled": "chưa cài",
   "capability.missingKey": "thiếu API key",
   "capability.notConfigured": "chưa cấu hình",
@@ -221,6 +242,10 @@ export const vi = {
   "status.queueingRerun": "Đang xếp hàng nhận dạng lại…",
   "status.muxing": "Đang ghép phụ đề vào video…",
   "status.muxed": "Đã xuất video có phụ đề",
+  "status.dubbing": "Đang lồng tiếng…",
+  "status.dubbed": "Đã lồng tiếng xong",
+  "status.dubExporting": "Đang xuất video lồng tiếng…",
+  "status.dubbedWithWarning": "Đã lồng tiếng · {warning}",
   "status.stoppedWith": "Đã dừng · {kept}",
   "status.subtitlesWithWarning": "Đã tạo phụ đề · {warning}",
   "status.partialWithWarning": "Hoàn tất một phần · {warning}",
@@ -237,10 +262,16 @@ export const vi = {
   "run.listening": "AI đang nghe audio và dựng timestamp…",
   "run.analyzing": "AI đang phân tích ngữ cảnh và tách lượt thoại…",
   "run.translating": "AI đang dịch từng cue…",
+  "run.dubbing": "AI đang đọc thoại và ghép vào timeline…",
   "run.cancelTitle": "Dừng tiến trình đang chạy",
   "action.cancel": "Hủy",
   "action.cancelling": "Đang dừng…",
   "action.close": "Đóng",
+  "action.save": "Lưu",
+  "action.delete": "Xóa",
+  "action.overwrite": "Ghi đè",
+  "action.replaceNotes": "Thay quy tắc",
+  "action.keepNotes": "Giữ nguyên",
   "action.agree": "Đồng ý",
 
   /* ── Toast ──────────────────────────────────────────────────── */
@@ -252,9 +283,17 @@ export const vi = {
   "toast.pickCueToTranslateFrom": "Chọn cue muốn dịch từ đó trở đi",
   "toast.needCuesToAnalyze": "Cần có cue trước khi phân tích",
   "toast.reanalyzing": "Đang phân tích lại lượt thoại, không chạy lại Deepgram",
+  "toast.needCuesToDub": "Cần có câu thoại trước khi lồng tiếng",
+  "toast.dubQueued": "Đã xếp hàng lồng tiếng",
+  "toast.dubbed": "Đã lồng tiếng xong — bấm nghe thử",
+  "toast.noDubYet": "Chưa có bản lồng tiếng để xuất",
+  "toast.dubExported": "Đã xuất video lồng tiếng",
+  "toast.dubNotConfigured": "Chưa cấu hình lồng tiếng trên máy chủ",
   "toast.noProject": "Chưa có project",
   "toast.noVideoToMux": "Project này không có video để ghép",
   "toast.muxed": "Đã xuất video có soft subtitle",
+  "toast.styleSaved": "Đã lưu phong cách “{name}”",
+  "toast.styleDeleted": "Đã xóa phong cách “{name}”",
   "toast.translationQueued": "Đã đưa phụ đề vào hàng đợi dịch",
   "toast.translatingFrom": "Đang dịch tiếp từ cue {cue}",
   "toast.stopRequested": "Đã yêu cầu dừng — chờ bước đang chạy kết thúc",
@@ -287,6 +326,8 @@ export const vi = {
   "job.analysisFailed": "AI không phân tích được lượt thoại",
   "job.someCuesKept": "một số cue được giữ nguyên",
   "job.failed": "Job thất bại",
+  "job.dubFailed": "Không lồng tiếng được",
+  "job.dubPartial": "một số câu bị bỏ trống",
 
   /* ── Hộp thoại xác nhận ─────────────────────────────────────── */
   "confirm.title": "Xác nhận",
@@ -299,6 +340,13 @@ export const vi = {
   "confirm.retranslateNote":
     "{count} cue đã có bản dịch sẽ bị dịch lại từ đầu. Muốn giữ phần đã xong thì chọn cue cần dịch tiếp rồi bấm “Dịch từ cue…”.",
   "confirm.retranslateOk": "Dịch lại tất cả",
+  "confirm.redubTitle": "Lồng tiếng lại?",
+  "confirm.redubNote": "Bản lồng tiếng hiện tại sẽ bị thay thế bằng bản mới.",
+  "confirm.redubOk": "Lồng tiếng lại",
+  "confirm.staleDubTitle": "Xuất bản lồng tiếng đã cũ?",
+  "confirm.staleDubNote":
+    "Phụ đề đã đổi sau lần lồng tiếng gần nhất. File xuất ra sẽ mang lời thoại và mốc thời gian của bản cũ.",
+  "confirm.staleDubOk": "Cứ xuất",
   "confirm.deleteTitle": "Xóa project?",
   "confirm.deleteNote":
     "Video, phụ đề và metadata trong thư mục project sẽ bị xóa khỏi đĩa. Không hoàn tác được.",
@@ -386,6 +434,21 @@ export const vi = {
   "style.genz": "GenZ, khẩu ngữ",
   "style.formal": "Trang trọng (tài liệu, tin tức)",
 
+  /* ── Phong cách người dùng tự lưu ───────────────────────────── */
+  "style.savedGroup": "Phong cách của bạn",
+  "style.saveTitle": "Lưu thành phong cách",
+  "style.saveNote":
+    "Lưu phong cách đang chọn cùng toàn bộ quy tắc riêng bên dưới, để lần sau chọn lại trong một bước. Trùng tên sẽ ghi đè phong cách cũ.",
+  "style.namePlaceholder": "Ví dụ: Phim Thái, giọng nhẹ",
+  "style.overwriteTitle": "Ghi đè phong cách đã có?",
+  "style.overwriteNote": "Phong cách này đã tồn tại. Quy tắc cũ của nó sẽ bị thay bằng những gì đang nhập.",
+  "style.deleteTitle": "Xóa phong cách này?",
+  "style.deleteNote":
+    "Chỉ xóa lối tắt. Các project đã dịch giữ nguyên bản dịch, và quy tắc vẫn còn trong ô bên dưới.",
+  "style.replaceNotesTitle": "Thay quy tắc riêng đang có?",
+  "style.replaceNotesNote":
+    "Ô quy tắc riêng đang có nội dung bạn tự nhập. Chọn phong cách này sẽ thay bằng quy tắc của nó.",
+
   /* ── Gợi ý model (mã từ backend) ────────────────────────────── */
   "model.fromEnv": "từ .env",
   "model.whisper.tiny": "nhanh, nhẹ",
@@ -409,6 +472,17 @@ export const vi = {
   "model.llm.excellent": "dịch xuất sắc",
   "model.llm.popular": "phổ biến",
 
+  /* ── Giọng đọc (mã từ backend) ──────────────────────────────── */
+  "voice.vi.female": "nữ, tiếng Việt",
+  "voice.vi.male": "nam, tiếng Việt",
+  "voice.en.female": "nữ, tiếng Anh",
+  "voice.en.male": "nam, tiếng Anh",
+  "voice.ja.female": "nữ, tiếng Nhật",
+  "voice.ko.female": "nữ, tiếng Hàn",
+  "voice.zh.female": "nữ, tiếng Trung",
+  "voice.mock": "giọng giả lập, chỉ để test",
+  "voice.fromEnv": "từ .env",
+
   /* ── Tên các bước (mã từ backend) ───────────────────────────── */
   "op.transcribe": "nhận dạng",
   "op.translate": "dịch phụ đề",
@@ -416,6 +490,10 @@ export const vi = {
   "op.thumbnail": "tạo ảnh đại diện",
   "op.waveform": "đọc dạng sóng",
   "op.mux": "ghép phụ đề vào video",
+  "op.dub": "lồng tiếng",
+  "op.dubDecode": "giải mã giọng đọc",
+  "op.dubMix": "trộn tiếng lồng với tiếng gốc",
+  "op.dubShorten": "rút gọn thoại cho vừa thời lượng",
 
   /* ── Tiến độ (mã từ backend) ────────────────────────────────── */
   "progress.queued": "Đang chờ đến lượt xử lý",
@@ -426,6 +504,9 @@ export const vi = {
   "progress.processingResult": "Đang xử lý kết quả từ {provider}",
   "progress.analyzingTurns": "Đang phân tích lượt thoại",
   "progress.translated": "Đã dịch {done}/{total} dòng",
+  "progress.dubbing": "Đang lồng tiếng {done}/{total} câu",
+  "progress.dubAssembling": "Đang ghép các câu thành một track",
+  "progress.dubMixing": "Đang trộn với tiếng gốc",
 
   /* ── Lỗi (mã từ backend) ────────────────────────────────────── */
   "err.raw": "{text}",
@@ -444,6 +525,7 @@ export const vi = {
   "err.job.noVideo": "Job này không có video",
   "err.job.videoFileGone": "File video không còn trong workspace",
   "err.job.subtitleOnly": "Job import subtitle không có video",
+  "err.job.noCuesToDub": "Job chưa có câu thoại nào để lồng tiếng",
 
   "err.upload.tooLarge": "File vượt quá giới hạn {limitMb} MB",
   "err.upload.videoMissing": "Thiếu file video",
@@ -466,6 +548,15 @@ export const vi = {
   "err.translation.badFromCue": "Vị trí cue bắt đầu không hợp lệ",
   "err.translation.noCuesFromHere": "Không còn cue nào từ vị trí đó trở đi",
 
+  "err.style.nameMissing": "Phong cách cần có tên",
+  "err.style.nameTooLong": "Tên phong cách tối đa {limit} ký tự",
+  "err.style.notesTooLong": "Quy tắc của phong cách tối đa {limit} ký tự",
+  "err.style.badBase": "Phong cách gốc không hợp lệ",
+  "err.style.nameTaken": "Đã có phong cách tên “{name}”",
+  "err.style.tooMany": "Chỉ lưu được tối đa {limit} phong cách",
+  "err.style.notFound": "Không tìm thấy phong cách đã lưu",
+  "err.style.notSaved": "Máy chủ không ghi được phong cách xuống đĩa",
+
   "err.cue.endBeforeStart": "Cue {cue}: end phải lớn hơn start",
   "err.cue.negativeStart": "Cue {cue}: start không được âm",
   "err.download.badFormat": "Format phải là srt hoặc vtt",
@@ -477,12 +568,35 @@ export const vi = {
   "err.speakerAnalysis.failed":
     "AI không trả về cue hợp lệ; đã giữ kết quả diarization âm thanh",
 
+  "err.dub.notConfigured":
+    "Chưa cấu hình lồng tiếng. Cài edge-tts (pip install -r requirements.txt) rồi khởi động lại app.",
+  "err.dub.voiceMissing": "Chưa chọn giọng đọc",
+  "err.dub.badVoice": "Tên giọng đọc không hợp lệ",
+  "err.dub.badGain": "Mức tiếng gốc phải nằm trong khoảng 0 đến 1",
+  "err.dub.badPreference": "Ưu tiên khớp thời lượng phải là speed hoặc natural",
+  "err.dub.badAudioChoice": "Lựa chọn audio phải là original, dubbed hoặc both",
+  "err.dub.nothingToVoice": "Không có câu nào để đọc",
+  "err.dub.allVoicesFailed": "Không đọc được câu nào ({failed} câu lỗi)",
+  "err.dub.partial": "{failed}/{total} câu không đọc được nên bị để trống",
+  "err.dub.stopped": "Đã dừng theo yêu cầu",
+  "err.dub.noTrack": "Project này chưa có bản lồng tiếng",
+  "err.dub.trackFileGone": "File lồng tiếng không còn trong workspace",
+
+  "err.tts.badProvider": "Provider giọng đọc không hợp lệ: {provider}",
+  "err.tts.edgeMissing": "Chưa cài edge-tts. Chạy: pip install -r requirements.txt",
+  "err.tts.badVoice": "Tên giọng đọc quá dài",
+  "err.tts.emptyText": "Câu rỗng thì không đọc được",
+  "err.tts.emptyAudio": "Provider giọng đọc trả về audio rỗng",
+  "err.tts.timeout": "Provider giọng đọc quá {seconds} giây không phản hồi",
+  "err.tts.requestFailed": "Provider giọng đọc lỗi: {cause}",
+
   "err.ffmpeg.missing": "Không tìm thấy ffmpeg trong PATH",
   "err.ffmpeg.timeout": "ffmpeg chạy quá {seconds} giây khi {operation}",
   "err.ffmpeg.launchFailed": "Không chạy được ffmpeg khi {operation}: {cause}",
   "err.ffmpeg.failed": "ffmpeg lỗi khi {operation}: {detail}",
   "err.ffmpeg.noThumbnail": "ffmpeg không tạo được ảnh đại diện",
   "err.ffmpeg.noMuxedVideo": "ffmpeg không tạo được file video có phụ đề",
+  "err.ffmpeg.noDubTrack": "ffmpeg không tạo được track lồng tiếng",
   "err.media.noAudioTrack": "Video không có audio track",
   "err.muxFailed": "Không ghép được phụ đề vào video",
 
@@ -530,4 +644,5 @@ export const vi = {
     "Model không dịch được {missing}/{total} dòng trong lô (dòng {lines})",
   "err.ai.translationCountMismatch": "Model trả về {returned} bản dịch cho {expected} dòng",
   "err.ai.targetLanguageMissing": "Cần chọn ngôn ngữ đích trước khi dịch",
+  "err.ai.dubShortenNotJson": "Model rút gọn thoại không trả về JSON hợp lệ",
 };

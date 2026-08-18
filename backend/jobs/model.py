@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 
+from ..dubbing import dub_is_stale
 from ..messages import Message
 from ..subtitles import strip_speaker_labels
 
@@ -32,6 +33,7 @@ PHASE_QUEUED = "queued"
 PHASE_TRANSCRIBING = "transcribing"
 PHASE_ANALYZING = "analyzing"
 PHASE_TRANSLATING = "translating"
+PHASE_DUBBING = "dubbing"
 
 
 def is_valid_job_id(job_id: str) -> bool:
@@ -102,6 +104,17 @@ def new_job(
         "translation_provider": None,
         "translation_model": None,
         "detected_language": None,
+        "dubbing_status": None,
+        "dubbing_error": None,
+        "dubbing_report": None,
+        "dubbing_provider": None,
+        "dubbing_voice": None,
+        # The cues the dub was actually made from, so an edit afterwards is
+        # visible rather than something the user finds out about on export.
+        "dubbing_fingerprint": None,
+        # Where the mixed preview lives. Internal, like every other path here:
+        # the client learns only that there is one.
+        "dub_audio_path": None,
         "cues": [],
     }
 
@@ -152,5 +165,12 @@ def public_job(job: dict) -> dict:
         "translation_model": job.get("translation_model"),
         "translation_style": job.get("translation_style"),
         "translation_style_notes": job.get("translation_style_notes"),
+        "dubbing_status": job.get("dubbing_status"),
+        "dubbing_error": job.get("dubbing_error"),
+        "dubbing_report": job.get("dubbing_report"),
+        "dubbing_provider": job.get("dubbing_provider"),
+        "dubbing_voice": job.get("dubbing_voice"),
+        "dub_audio_available": bool(job.get("dub_audio_path")),
+        "dub_stale": dub_is_stale(job),
         "cues": clean_cues(job.get("cues", [])),
     }

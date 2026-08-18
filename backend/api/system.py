@@ -16,6 +16,7 @@ from ..config import settings
 from ..media import find_ffmpeg
 from ..messages import Message
 from ..translation_style import style_options
+from ..tts import default_voice, is_configured as tts_is_configured, list_voices, resolve_tts_provider
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -150,6 +151,14 @@ def capabilities() -> dict:
     translation_provider = resolve_translation_provider(settings.translation_provider)
     transformers_available = importlib.util.find_spec("transformers") is not None
     llm_configured = bool(settings.llm_base_url.strip())
+    ffmpeg_available = find_ffmpeg() is not None
+    try:
+        tts_provider = resolve_tts_provider("")
+    except Exception:
+        # A typo in TTS_PROVIDER must not take the whole capability probe down
+        # with it — every other engine on this page still works.
+        tts_provider = ""
+    tts_configured = bool(tts_provider) and tts_is_configured(tts_provider)
     return {
         "transcription_provider": settings.transcription_provider.lower(),
         "whisper_model": settings.whisper_model,
@@ -177,6 +186,15 @@ def capabilities() -> dict:
         "speaker_analysis_model": (
             settings.speaker_analysis_model or settings.llm_model
         ),
-        "ffmpeg": find_ffmpeg() is not None,
+        "ffmpeg": ffmpeg_available,
         "max_concurrent_jobs": settings.max_concurrent_jobs,
+        "tts_provider": tts_provider,
+        "tts_voice": default_voice(tts_provider),
+        "tts_voices": list_voices(tts_provider),
+        "tts_configured": tts_configured,
+        # Dubbing needs a voice *and* something to decode it with: the mix, the
+        # export and every duration measurement in between go through ffmpeg.
+        "dubbing_configured": tts_configured and ffmpeg_available,
+        "dub_original_gain": settings.dub_original_gain,
+        "dub_shorten_with_llm": settings.dub_shorten_with_llm and llm_configured,
     }

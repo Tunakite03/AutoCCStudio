@@ -12,6 +12,7 @@ import { toast } from "../core/feedback.js";
 import { t } from "../core/i18n.js";
 
 const player = $("#player");
+const dubPlayer = $("#dub-player");
 const viewer = $("#viewer");
 const overlay = $("#caption-overlay");
 const app = $(".app");
@@ -24,6 +25,9 @@ const local = {
   previewUrl: null,
   previewJobId: null,
   resumeAfterScrub: false,
+  // What the mute button said before the dub preview took over, so listening
+  // back does not silently undo a mute the user set themselves.
+  mutedBeforeDub: null,
 };
 
 /* ── Time ─────────────────────────────────────────────────────── */
@@ -134,6 +138,71 @@ export function loadJobVideo(job, videoUrl) {
   }
 }
 
+/* ── Dub preview ──────────────────────────────────────────────── */
+
+/** Point the preview player at a dub track, or clear it when there is none. */
+export function setDubTrack(url) {
+  if (url) {
+    dubPlayer.src = url;
+    return;
+  }
+  dubPlayer.pause();
+  dubPlayer.removeAttribute("src");
+  dubPlayer.load();
+}
+
+function releaseDub() {
+  player.pause();
+  player.muted = local.mutedBeforeDub ?? false;
+  local.mutedBeforeDub = null;
+  app.classList.toggle("is-muted", player.muted);
+}
+
+/**
+ * Drive the video from the dub track while it plays.
+ *
+ * The dub leads because it is what the user pressed play on. The original audio
+ * is muted underneath it — hearing the same line twice, a beat apart, is the one
+ * thing a dub preview must not do.
+ */
+function mountDubPreview() {
+  dubPlayer.addEventListener("play", () => {
+    if (local.mutedBeforeDub === null) local.mutedBeforeDub = player.muted;
+    player.muted = true;
+    app.classList.add("is-muted");
+    if (!local.ready) return;
+    player.currentTime = dubPlayer.currentTime;
+    player
+      .play()
+      // Starting a video takes long enough that the dub has moved on by the
+      // time the first frame lands. Re-aligning once here saves the periodic
+      // correction below from having to fix a gap that was there from the start.
+      .then(() => {
+        player.currentTime = dubPlayer.currentTime;
+      })
+      .catch(() => {
+        /* a project with no video still previews as audio alone */
+      });
+  });
+
+  dubPlayer.addEventListener("pause", releaseDub);
+  dubPlayer.addEventListener("ended", releaseDub);
+
+  dubPlayer.addEventListener("seeked", () => {
+    if (local.ready) player.currentTime = dubPlayer.currentTime;
+  });
+
+  // Two media elements drift apart over a feature-length preview. A quarter of a
+  // second is past what reads as lip-sync; correcting below that is visible as a
+  // stutter, so the threshold is the point of the check.
+  dubPlayer.addEventListener("timeupdate", () => {
+    if (!local.ready || player.paused) return;
+    if (Math.abs(player.currentTime - dubPlayer.currentTime) > 0.25) {
+      player.currentTime = dubPlayer.currentTime;
+    }
+  });
+}
+
 /** Drop whatever is loaded — used when the open project is deleted. */
 export function clearVideo() {
   if (local.previewUrl) URL.revokeObjectURL(local.previewUrl);
@@ -144,6 +213,7 @@ export function clearVideo() {
   player.pause();
   player.removeAttribute("src");
   player.load();
+  setDubTrack(null);
   viewer.classList.remove("has-video");
   $("#tc-total").textContent = `/ ${formatTimecode(0)}`;
   publishTime();
@@ -245,6 +315,7 @@ export function mountTransport() {
   });
 
   player.addEventListener("seeked", publishTime);
+  mountDubPreview();
   new ResizeObserver(syncFrameGeometry).observe(viewer);
 
   // The overlay shows whatever cue is live, and follows edits to that cue.

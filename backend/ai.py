@@ -1649,3 +1649,119 @@ def translate_cues(
             on_batch(end, total, apply_translations())
 
     return apply_translations()
+
+
+OP_DUB_SHORTEN = Message("op.dubShorten")
+
+# Small batches on purpose: every line here carries its own character budget,
+# and a model given thirty of them starts applying one budget to all of them.
+DUB_SHORTEN_BATCH = 12
+
+
+def _shortened_line(original: str, candidate, limit: int) -> str | None:
+    """Accept a rewrite only if it is genuinely shorter and still a line.
+
+    A model that answers with the original text, an apology, or something longer
+    has not helped — the caller is better off speeding the original up than
+    swapping in a rewrite that costs meaning and buys no time.
+    """
+
+    if not isinstance(candidate, str):
+        return None
+    cleaned = " ".join(strip_speaker_labels(candidate).split())
+    if not cleaned or cleaned == original:
+        return None
+    if len(cleaned) >= len(original):
+        return None
+    # Below a third of the original is not a shortening, it is a summary that
+    # dropped a clause. Rejecting it keeps the dub honest at the cost of a
+    # rushed line.
+    if len(cleaned) * 3 < len(original) and len(cleaned) < limit // 2:
+        return None
+    return cleaned
+
+
+def shorten_for_dubbing(
+    items: list[dict],
+    target_language: str | None = None,
+    *,
+    model: str | None = None,
+) -> dict[int, str]:
+    """Say the same thing in fewer characters, for lines that will not fit.
+
+    `items` is `[{"id": cue index, "text": line, "max_chars": budget}]`. The
+    reply maps only the lines that came back genuinely shorter — anything else
+    is dropped, so the caller can treat a missing id as "this one stays as it is".
+
+    This is the last of the three fitting strategies and the only one that costs
+    provider calls, which is why `dubbing` reaches it with the handful of lines
+    that a speed-up and the following silence could not absorb.
+    """
+
+    requests = [
+        {
+            "id": int(item["id"]),
+            "text": " ".join(str(item.get("text", "")).split()),
+            "max_chars": max(1, int(item.get("max_chars") or 0)),
+        }
+        for item in items
+        if str(item.get("text", "")).strip()
+    ]
+    results: dict[int, str] = {}
+    if not requests:
+        return results
+
+    originals = {item["id"]: item["text"] for item in requests}
+    limits = {item["id"]: item["max_chars"] for item in requests}
+    language = (target_language or "").strip()
+
+    for offset in range(0, len(requests), DUB_SHORTEN_BATCH):
+        batch = requests[offset : offset + DUB_SHORTEN_BATCH]
+        prompt = (
+            "Each line below takes too long to say out loud for the subtitle it "
+            "belongs to. Rewrite every one of them so it can be spoken faster.\n"
+            "- `max_chars` is that line's budget: get at or under it.\n"
+            "- Keep the meaning, the tone and the form of address. Dropping a "
+            "clause is better than changing who says what to whom.\n"
+            "- Stay in the same language as the line you are given"
+            + (f" ({language})" if language else "")
+            + ".\n"
+            "- Reply with the rewritten line only: no quotes, no notes, no "
+            "explanation of what you cut.\n"
+            "- Never add speaker labels, dashes or line breaks.\n"
+            'Reply with one JSON object keyed by id as a string, e.g. {"7":"Ngắn hơn."}. '
+            "Return every id you were given and no others.\n\n"
+            + json.dumps({"lines": batch}, ensure_ascii=False)
+        )
+        content = _llm_completion(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You compress dialogue for dubbing. You emit valid JSON "
+                        "only, and you never change what a line means."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            operation=OP_DUB_SHORTEN,
+            model=model,
+        )
+        payload = _extract_json_value(content, "err.ai.dubShortenNotJson")
+        if not isinstance(payload, dict):
+            raise AIResponseFormatError("err.ai.dubShortenNotJson")
+
+        for key, value in payload.items():
+            try:
+                line_id = int(str(key).strip())
+            except (TypeError, ValueError):
+                continue
+            if line_id not in originals:
+                continue
+            accepted = _shortened_line(originals[line_id], value, limits[line_id])
+            if accepted is not None:
+                results[line_id] = accepted
+
+    logger.info("dub shortening: %s of %s lines rewritten", len(results), len(requests))
+    return results

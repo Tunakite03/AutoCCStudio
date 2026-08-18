@@ -17,6 +17,7 @@ AutoCC is a local-first MVP application for generating, editing, and translating
 - **Multi-level History:** Undo / Redo for all cue editing operations; rapid typing bursts are automatically grouped into single history entries.
 - **Reading Speed Warning (CPS):** Visual Characters-Per-Second warnings directly on timeline clips and inspector lists based on 17/21 cps thresholds.
 - **Customizable Layout:** Resizable left/right sidebars and timeline height persisted across sessions, with dark and light theme support.
+- **Dubbing:** Read the translation aloud with TTS, fit every line to its own cue automatically, preview it against the video in the app, and export an MP4 with or without the original audio alongside it.
 - **Export & Muxing:** Export clean SRT/VTT files or mux soft subtitle tracks into MP4 videos using ffmpeg.
 
 ## Running on Windows
@@ -116,6 +117,75 @@ Presets are defined in [backend/translation_style.py](backend/translation_style.
 
 Hosted providers enforce rate limits (requests per second / tokens per minute). When encountering HTTP 429, the app honors the `Retry-After` header (or applies exponential backoff up to 1 minute) under a dedicated `HTTP_RATE_LIMIT_RETRIES` budget. If rate limits persist, throttle request pacing with `LLM_MIN_INTERVAL_SECONDS` (e.g., `1.1` for Mistral's free tier). Any completed batches are flushed to disk before an error is raised.
 
+## Dubbing
+
+Once a project has translations, AutoCC reads every cue out loud, lays the
+recordings onto one track at their own timestamps, and mixes that over the
+original audio.
+
+The default engine is `edge-tts` — Microsoft's free neural endpoint, already in
+`requirements.txt`. Configure it in `.env`:
+
+```dotenv
+TTS_PROVIDER=edge
+TTS_VOICE=vi-VN-HoaiMyNeural
+DUB_ORIGINAL_GAIN=0.25
+```
+
+The Vietnamese voices are `vi-VN-HoaiMyNeural` (female) and
+`vi-VN-NamMinhNeural` (male). `edge-tts --list-voices` lists everything the
+provider offers.
+
+### Fitting a line to its cue
+
+A translated line almost never takes exactly as long to say as the cue it belongs
+to. Three strategies handle it, each tried only when the one before it was not
+enough:
+
+1. **Speed it up** — `atempo` up to `DUB_MAX_SPEEDUP` (1.25 by default). The
+   cheapest fix, and the only one that keeps the sync exact.
+2. **Let it spill** — run past the cue by at most `DUB_MAX_SPILL_SECONDS` into the
+   silence that follows, keeping a guard before the next cue.
+3. **Ask the LLM for fewer words** — a line neither trick can save is rewritten into
+   a character budget and recorded again. This is the only step that costs provider
+   calls, so `DUB_SHORTEN_WITH_LLM=false` turns it off; a line then simply gets read
+   as fast as the speed limit allows.
+
+`DUB_PREFER` decides which of the first two goes first. `speed` (the default) holds
+the dub against the subtitles and speeds a line up even when there is silence behind
+it; `natural` spends that silence first and only speeds up what still will not fit —
+a better delivery, at the cost of picture and sound drifting further apart. On a
+20-line sample, `speed` sped 8 lines up and spilled none.
+
+`prefer` can also be sent with the dub request, so both can be compared on the same
+project without restarting the server:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/jobs/<job-id>/dub"   -H "Content-Type: application/json" -d '{"prefer":"natural"}'
+```
+
+### When the subtitles change after a dub
+
+Every run records a fingerprint of exactly what it voiced — the words and the timings
+of each cue that had something to say. Edit a translation or move a cue afterwards and
+`dub_stale` turns `true`: the panel says so, and exporting a dubbed MP4 asks for
+confirmation first. The recording is neither deleted nor blocked — it is out of date,
+not broken — but it can no longer be shipped by accident.
+
+Every run reports how many lines ended up in each category, and how many were still
+too long after all three.
+
+### Cache and export
+
+Each voiced line is cached under `runtime/<job>/dub/`, keyed by
+provider + voice + text. Editing one cue and dubbing again costs that one line;
+so does stopping a run and picking it up later. Deleting a project deletes the
+cache with it.
+
+Play the result back from the dubbing panel — the video mutes itself and follows
+along. **Export dubbed MP4** writes the dub as the default audio track; tick *Keep
+the original audio as a second track* to ship both and let the viewer choose.
+
 ## Quick Verification
 
 ```powershell
@@ -175,6 +245,8 @@ backend/jobs/tasks.py          background tasks: transcription, speaker turn ana
 backend/media.py               ffmpeg commands execution + media probe
 backend/subtitles.py           SRT & VTT parsers and formatters
 backend/ai.py                  adapters for faster-whisper, Deepgram, and OpenAI-compatible LLMs
+backend/tts.py                 speech synthesis adapters (edge-tts, plus a mock voice for tests)
+backend/dubbing.py             fitting lines to cues, the segment cache, and track assembly
 runtime/<job-id>/              video, subtitles, waveform.json, and temporary job metadata
 ```
 

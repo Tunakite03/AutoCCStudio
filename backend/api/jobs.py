@@ -19,6 +19,7 @@ from ..ai import (
     resolve_translation_provider,
 )
 from ..config import settings
+from ..dubbing import DubbingError, dub_text, resolve_preference
 from ..jobs import JobConflict, runner, store
 from ..jobs.model import (
     KIND_SUBTITLE_IMPORT,
@@ -30,7 +31,13 @@ from ..jobs.model import (
     new_job,
     public_job,
 )
-from ..jobs.tasks import speaker_analysis_task, transcription_task, translation_task
+from ..jobs.tasks import (
+    dubbing_task,
+    speaker_analysis_task,
+    transcription_task,
+    translation_task,
+)
+from ..media import find_ffmpeg
 from ..messages import detail
 from ..subtitles import (
     SubtitleParseError,
@@ -38,13 +45,16 @@ from ..subtitles import (
     parse_subtitle,
     split_long_cues,
 )
-from ..translation_style import STYLE_AUTO, STYLES
+from ..translation_style import STYLE_AUTO, STYLE_NOTES_LIMIT, STYLES
+from ..tts import (
+    TTSProviderError,
+    VOICE_NAME_LIMIT,
+    default_voice,
+    is_configured as tts_is_configured,
+    resolve_tts_provider,
+)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
-
-# Long enough for a cast list and a page of house rules, short enough that it
-# cannot bloat every batch prompt.
-STYLE_NOTES_LIMIT = 2000
 
 
 class CueModel(BaseModel):
@@ -69,6 +79,18 @@ class TranslatePayload(BaseModel):
     # 0-based; cues before it keep the translation they already have. 0 is both
     # "start at the beginning" and "translate everything", which is the same run.
     from_cue: int = 0
+
+
+class DubPayload(BaseModel):
+    voice: str = ""
+    provider: str = ""
+    # Empty means "whatever the install is configured for" — the client only
+    # sends these when the user has actually moved them. `prefer` is settable
+    # per run rather than only through DUB_PREFER so the two strategies can be
+    # compared on the same project without restarting the server.
+    prefer: str = ""
+    original_gain: float | None = None
+    shorten: bool | None = None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -138,7 +160,9 @@ def _job_summary(job: dict, job_dir: Path) -> dict:
         updated_at = (job_dir / "job.json").stat().st_mtime
     except OSError:
         updated_at = 0.0
-    size_bytes = sum(item.stat().st_size for item in job_dir.glob("*") if item.is_file())
+    # Recursive: the dub cache is a subdirectory, and a project whose voiced
+    # segments outweigh its video should not read as the smaller of the two.
+    size_bytes = sum(item.stat().st_size for item in job_dir.rglob("*") if item.is_file())
     video_path = job.get("video_path")
 
     return {
@@ -215,6 +239,31 @@ def _resolve_translation_engine(provider: str, model: str) -> tuple[str, str]:
     if len(selected_model) > 128:
         raise HTTPException(status_code=400, detail=detail("err.model.nameTooLong"))
     return resolved_provider, selected_model
+
+
+def _resolve_dub_engine(provider: str, voice: str) -> tuple[str, str]:
+    """Validate the voice engine and settle on a voice.
+
+    ffmpeg is checked here rather than in the worker: a dub that dies twenty
+    minutes in because nothing can decode the synthesised audio is a worse way
+    to learn the same thing.
+    """
+
+    try:
+        resolved = resolve_tts_provider(provider)
+    except TTSProviderError as exc:
+        raise HTTPException(status_code=400, detail=exc.message.as_dict()) from exc
+    if not tts_is_configured(resolved):
+        raise HTTPException(status_code=400, detail=detail("err.dub.notConfigured"))
+    if not find_ffmpeg():
+        raise HTTPException(status_code=503, detail=detail("err.ffmpeg.missing"))
+
+    selected_voice = voice.strip() or default_voice(resolved)
+    if not selected_voice:
+        raise HTTPException(status_code=400, detail=detail("err.dub.voiceMissing"))
+    if len(selected_voice) > VOICE_NAME_LIMIT:
+        raise HTTPException(status_code=400, detail=detail("err.dub.badVoice"))
+    return resolved, selected_voice
 
 
 def _normalise_language(source_language: str) -> str | None:
@@ -436,6 +485,50 @@ def start_translation(job_id: str, payload: TranslatePayload) -> dict:
             provider=resolved_provider,
             model=selected_model,
             from_cue=payload.from_cue,
+        ),
+    )
+    return snapshot
+
+
+@router.post("/{job_id}/dub")
+def start_dubbing(job_id: str, payload: DubPayload) -> dict:
+    """Read the project aloud and lay the result over the original audio."""
+
+    resolved_provider, selected_voice = _resolve_dub_engine(payload.provider, payload.voice)
+    gain = settings.dub_original_gain if payload.original_gain is None else payload.original_gain
+    if not 0.0 <= gain <= 1.0:
+        raise HTTPException(status_code=400, detail=detail("err.dub.badGain"))
+    try:
+        prefer = resolve_preference(payload.prefer)
+    except DubbingError as exc:
+        raise HTTPException(status_code=400, detail=exc.message.as_dict()) from exc
+
+    with _claim(job_id) as job:
+        if not any(dub_text(cue) for cue in job.get("cues", [])):
+            raise HTTPException(status_code=400, detail=detail("err.job.noCuesToDub"))
+        job["status"] = STATUS_PROCESSING
+        job["error"] = None
+        job["cancel_requested"] = False
+        job["dubbing_status"] = "pending"
+        job["dubbing_error"] = None
+        job["dubbing_report"] = None
+        job["dubbing_provider"] = resolved_provider
+        job["dubbing_voice"] = selected_voice
+        # The old preview belongs to the old voice and the old cues. Dropping it
+        # now is what stops the player from offering yesterday's dub while
+        # today's is still rendering.
+        job["dub_audio_path"] = None
+        snapshot = public_job(job)
+
+    runner.submit(
+        job_id,
+        "dubbing",
+        dubbing_task(
+            resolved_provider,
+            selected_voice,
+            original_gain=gain,
+            prefer=prefer,
+            shorten=payload.shorten,
         ),
     )
     return snapshot

@@ -5,14 +5,14 @@
 
 import { $ } from "../core/dom.js";
 import { api } from "../core/api.js";
-import { confirmAction } from "../core/confirm.js";
+import { confirmAction, promptAction } from "../core/confirm.js";
 import { reportError, setStatus, toast } from "../core/feedback.js";
 import { formatFileSize } from "../core/format.js";
 import { optionLabel, t, tm } from "../core/i18n.js";
 import { cues, hasCues, isProcessing, on, onAny, setCapabilities, state } from "../core/store.js";
 import { adoptJob, bindPreviewToJob, noteLocalPreview, stopEvents, watchJob } from "./jobs.js";
 import { timeline } from "./timeline-view.js";
-import { showLocalPreview } from "./transport.js";
+import { setDubTrack, showLocalPreview } from "./transport.js";
 
 /* ── Sources ──────────────────────────────────────────────────── */
 
@@ -329,11 +329,12 @@ const translatedCount = () => cues().filter((cue) => (cue.translation || "").tri
  *  instead of something you pay for twice. */
 async function runTranslation(fromCue) {
   try {
+    const { style, notes } = styleRequest();
     const job = await api.translate(
       state.job.id,
       $("#target-language").value,
-      $("#translation-style").value,
-      $("#translation-style-notes").value,
+      style,
+      notes,
       $("#translation-provider").value,
       $("#translation-model").value,
       fromCue,
@@ -392,6 +393,116 @@ export async function reanalyzeSpeakers() {
   }
 }
 
+/* ── Dubbing ──────────────────────────────────────────────────── */
+
+function dubOptions() {
+  return {
+    voice: $("#dub-voice").value,
+    provider: state.capabilities?.tts_provider || "",
+    originalGain: Number($("#dub-gain").value) / 100,
+    shorten: $("#dub-shorten").checked,
+  };
+}
+
+export async function dubProject() {
+  if (!hasCues()) return toast(t("toast.needCuesToDub"), "error");
+  if (!state.capabilities?.dubbing_configured) {
+    return toast(t("toast.dubNotConfigured"), "error");
+  }
+
+  // Re-dubbing throws away a render that took as long as the video is: worth a
+  // confirm, exactly like re-translating is.
+  if (state.job?.dub_audio_available) {
+    const confirmed = await confirmAction({
+      title: t("confirm.redubTitle"),
+      target: state.job.video_name || state.job.subtitle_name || t("project.thisOne"),
+      note: t("confirm.redubNote"),
+      confirmLabel: t("confirm.redubOk"),
+      cancelLabel: t("confirm.keep"),
+    });
+    if (!confirmed) return;
+  }
+
+  try {
+    const job = await api.dub(state.job.id, dubOptions());
+    adoptJob(job, { keepSelection: true });
+    toast(t("toast.dubQueued"), "success");
+    watchJob(job.id, "dubbing");
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+/** How the run went, in the terms the fitting stage actually works in. */
+function dubReportText(report) {
+  const fits = report.fits || {};
+  let text = t("dub.report", {
+    voiced: report.voiced_cues ?? 0,
+    total: report.total_cues ?? 0,
+  });
+  text += t("dub.reportFits", {
+    spedUp: fits.sped_up || 0,
+    spill: fits.spill || 0,
+    shortened: report.shortened_cues || 0,
+  });
+  if (fits.overflow) text += t("dub.reportOverflow", { count: fits.overflow });
+  return text;
+}
+
+/** Point the preview player at this project's dub, or hide it when there is none. */
+function renderDubState() {
+  const job = state.job;
+  const available = Boolean(job?.dub_audio_available);
+  $("#dub-preview-wrap").hidden = !available;
+  setDubTrack(available ? api.dubAudioUrl(job.id, job.revision) : null);
+
+  if (job?.dubbing_voice && [...$("#dub-voice").options].some((o) => o.value === job.dubbing_voice)) {
+    $("#dub-voice").value = job.dubbing_voice;
+  }
+  // A failure, a partial run or an outdated take is reported here rather than in
+  // the run banner: they are about the dub, and the banner is gone by the time
+  // anyone reads it. Staleness comes first — it is the one the user can act on
+  // right now, and a run report next to it would only say the opposite.
+  const note = $("#dub-report");
+  const stale = Boolean(job?.dub_stale);
+  const failed = job?.dubbing_status === "failed" || job?.dubbing_status === "partial";
+  const report = job?.dubbing_report;
+  note.classList.toggle("text-crit", stale || failed);
+  note.textContent = stale
+    ? t("dub.stale")
+    : failed
+      ? tm(job.dubbing_error, "job.dubFailed")
+      : report
+        ? dubReportText(report)
+        : "";
+}
+
+/** The voices the configured provider offers. Built from capabilities, like the models. */
+function syncVoiceOptions(preferred = "") {
+  const options = state.capabilities?.tts_voices || [];
+  const select = $("#dub-voice");
+  if (!options.length) {
+    select.replaceChildren();
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  select.replaceChildren(
+    ...options.map((item) => {
+      const option = document.createElement("option");
+      option.value = item.value;
+      option.textContent = optionLabel(item);
+      return option;
+    }),
+  );
+  const wanted = preferred || state.capabilities?.tts_voice || "";
+  if ([...select.options].some((option) => option.value === wanted)) select.value = wanted;
+}
+
+function renderGainValue() {
+  $("#dub-gain-value").textContent = t("dub.gainValue", { percent: $("#dub-gain").value });
+}
+
 /* ── Deliverables ─────────────────────────────────────────────── */
 
 function downloadSubtitle(track, format) {
@@ -401,18 +512,36 @@ function downloadSubtitle(track, format) {
   link.click();
 }
 
-async function muxVideo() {
+/** `audio` is original | dubbed | both — the same render, a different soundtrack. */
+async function muxVideo(audio = "original") {
   if (!state.job?.video_available) return toast(t("toast.noVideoToMux"), "error");
+  const dubbed = audio !== "original";
+  if (dubbed && !state.job?.dub_audio_available) return toast(t("toast.noDubYet"), "error");
+
+  // Exporting a dub made before the last round of cue edits is the one way this
+  // feature can hand someone a wrong file without ever looking broken.
+  if (dubbed && state.job?.dub_stale) {
+    const confirmed = await confirmAction({
+      title: t("confirm.staleDubTitle"),
+      target: state.job.video_name || state.job.subtitle_name || t("project.thisOne"),
+      note: t("confirm.staleDubNote"),
+      confirmLabel: t("confirm.staleDubOk"),
+      cancelLabel: t("confirm.keep"),
+    });
+    if (!confirmed) return;
+  }
+
   try {
-    setStatus(t("status.muxing"), "busy");
-    const blob = await api.mux(state.job.id);
+    setStatus(t(dubbed ? "status.dubExporting" : "status.muxing"), "busy");
+    const blob = await api.mux(state.job.id, audio);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `${(state.job.video_name || "video").replace(/\.[^.]+$/, "")}.subtitled.mp4`;
+    const stem = (state.job.video_name || "video").replace(/\.[^.]+$/, "");
+    link.download = `${stem}.${dubbed ? "dubbed" : "subtitled"}.mp4`;
     link.click();
     URL.revokeObjectURL(link.href);
-    setStatus(t("status.muxed"));
-    toast(t("toast.muxed"), "success");
+    setStatus(t(dubbed ? "toast.dubExported" : "status.muxed"));
+    toast(t(dubbed ? "toast.dubExported" : "toast.muxed"), "success");
   } catch (error) {
     reportError(error);
   }
@@ -524,31 +653,229 @@ function renderCapabilityNote(capabilities) {
   const dialogueAI = capabilities.speaker_analysis_configured
     ? capabilities.speaker_analysis_model
     : t("capability.notConfigured");
+  const dub = capabilities.dubbing_configured
+    ? capabilities.tts_voice || capabilities.tts_provider
+    : t("capability.notConfigured");
   $("#capability-note").textContent = t("capability.note", {
     deepgram,
     whisper,
     dialogue: dialogueAI,
     translation,
+    dub,
     ffmpeg: t(capabilities.ffmpeg ? "capability.ok" : "capability.missing"),
   });
 }
 
+/* ── Styles ───────────────────────────────────────────────────── */
+
+/**
+ * A saved style is a *shortcut*, not a third kind of style.
+ *
+ * It holds a preset plus a block of house rules, and choosing it does nothing
+ * more than put those two into the controls that were already there. So the
+ * translator never learns about saved styles, the rules box always shows what
+ * will actually be sent, and deleting a style cannot change how an old project
+ * was translated — the project kept the preset and the rules, not a reference.
+ *
+ * The prefix keeps the picker's values apart: no backend style key contains ":".
+ */
+const SAVED_PREFIX = "saved:";
+
+let presetStyles = [];
+let savedStyles = [];
+// The rules we last wrote into the box ourselves. Anything else in there was
+// typed by a person and is never overwritten without asking.
+let appliedStyleNotes = null;
+// What the picker was on before the current change, so a refused overwrite can
+// put it back rather than leaving a style selected whose rules were not applied.
+let lastStyleValue = "";
+
+const savedStyleById = (id) => savedStyles.find((style) => style.id === id) || null;
+
+/** The saved style the picker is on, or null when it is on a preset. */
+function selectedSavedStyle() {
+  const value = $("#translation-style").value;
+  return value.startsWith(SAVED_PREFIX)
+    ? savedStyleById(value.slice(SAVED_PREFIX.length))
+    : null;
+}
+
+/** What the translate call actually sends: a preset key and the rules box. */
+function styleRequest() {
+  const saved = selectedSavedStyle();
+  return {
+    style: saved ? saved.base : $("#translation-style").value,
+    notes: $("#translation-style-notes").value,
+  };
+}
+
 /** The style presets live in the backend, so the picker is built from them. */
-function syncStyleOptions(capabilities) {
-  const options = capabilities?.translation_styles || [];
-  if (!options.length) return;
+function renderStyleOptions() {
+  if (!presetStyles.length) return;
   const select = $("#translation-style");
   const preferred = select.value;
-  select.replaceChildren(
-    ...options.map((item) => {
-      const option = document.createElement("option");
-      option.value = item.value;
-      option.textContent = tm({ code: item.label_code });
-      return option;
-    }),
-  );
-  if ([...select.options].some((option) => option.value === preferred)) {
+  const option = (value, label) => {
+    const node = document.createElement("option");
+    node.value = value;
+    node.textContent = label;
+    return node;
+  };
+
+  const nodes = presetStyles.map((item) => option(item.value, tm({ code: item.label_code })));
+  if (savedStyles.length) {
+    const group = document.createElement("optgroup");
+    group.label = t("style.savedGroup");
+    group.append(...savedStyles.map((style) => option(SAVED_PREFIX + style.id, style.name)));
+    nodes.push(group);
+  }
+  select.replaceChildren(...nodes);
+
+  if ([...select.options].some((item) => item.value === preferred)) {
     select.value = preferred;
+  }
+  lastStyleValue = select.value;
+  refreshStyleButtons();
+}
+
+function syncStyleOptions(capabilities) {
+  presetStyles = capabilities?.translation_styles || [];
+  renderStyleOptions();
+}
+
+async function loadSavedStyles() {
+  try {
+    savedStyles = (await api.styles()).styles || [];
+  } catch {
+    // Presets still translate, so a list that will not load is not worth a
+    // toast on boot — the next save reports the real failure.
+    savedStyles = [];
+  }
+  renderStyleOptions();
+}
+
+function refreshStyleButtons() {
+  $("#style-delete").hidden = !selectedSavedStyle();
+}
+
+/**
+ * Picking a style fills the rules box with what it holds, because that box is
+ * what travels to the translator — leaving the previous style's rules under a
+ * new name would translate the film with rules nobody chose.
+ *
+ * Text the user typed themselves is only replaced after they say so.
+ */
+async function applySelectedStyle() {
+  const select = $("#translation-style");
+  const box = $("#translation-style-notes");
+  const saved = selectedSavedStyle();
+  const wanted = saved ? saved.notes : "";
+  const current = box.value.trim();
+
+  if (current === wanted.trim()) {
+    appliedStyleNotes = saved ? saved.notes : null;
+    lastStyleValue = select.value;
+    return refreshStyleButtons();
+  }
+
+  const ours = appliedStyleNotes !== null && current === appliedStyleNotes.trim();
+  if (current && !ours) {
+    const replace = await confirmAction({
+      title: t("style.replaceNotesTitle"),
+      target: saved ? saved.name : tm({ code: presetLabelCode(select.value) }),
+      note: t("style.replaceNotesNote"),
+      confirmLabel: t("action.replaceNotes"),
+      cancelLabel: t("action.keepNotes"),
+      variant: "warning",
+    });
+    if (!replace) {
+      // Their rules stay, so the style that would have replaced them cannot.
+      select.value = lastStyleValue;
+      return refreshStyleButtons();
+    }
+  }
+
+  box.value = wanted;
+  appliedStyleNotes = saved ? saved.notes : null;
+  lastStyleValue = select.value;
+  refreshStyleButtons();
+}
+
+const presetLabelCode = (value) =>
+  presetStyles.find((item) => item.value === value)?.label_code || "style.auto";
+
+/** Save the picker and the rules box together, under a name of the user's own. */
+async function saveStyle() {
+  const saved = selectedSavedStyle();
+  const name = await promptAction({
+    title: t("style.saveTitle"),
+    note: t("style.saveNote"),
+    value: saved ? saved.name : "",
+    placeholder: t("style.namePlaceholder"),
+    maxLength: 60,
+    confirmLabel: t("action.save"),
+  });
+  if (name === null) return;
+
+  const base = saved ? saved.base : $("#translation-style").value;
+  const notes = $("#translation-style-notes").value;
+  const existing = savedStyles.find(
+    (style) => style.name.toLowerCase() === name.toLowerCase(),
+  );
+
+  try {
+    let style;
+    if (existing) {
+      // Reusing the name of a style that is not the one open is an overwrite,
+      // and the backend would refuse it as a duplicate anyway.
+      if (existing.id !== saved?.id) {
+        const overwrite = await confirmAction({
+          title: t("style.overwriteTitle"),
+          target: existing.name,
+          note: t("style.overwriteNote"),
+          confirmLabel: t("action.overwrite"),
+          variant: "warning",
+        });
+        if (!overwrite) return;
+      }
+      style = await api.updateStyle(existing.id, { base, notes });
+    } else {
+      style = await api.createStyle(name, base, notes);
+    }
+
+    await loadSavedStyles();
+    $("#translation-style").value = SAVED_PREFIX + style.id;
+    appliedStyleNotes = style.notes;
+    lastStyleValue = $("#translation-style").value;
+    refreshStyleButtons();
+    toast(t("toast.styleSaved", { name: style.name }), "success");
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+async function deleteStyle() {
+  const saved = selectedSavedStyle();
+  if (!saved) return;
+  const confirmed = await confirmAction({
+    title: t("style.deleteTitle"),
+    target: saved.name,
+    note: t("style.deleteNote"),
+    confirmLabel: t("action.delete"),
+  });
+  if (!confirmed) return;
+
+  try {
+    await api.deleteStyle(saved.id);
+    await loadSavedStyles();
+    // Back to the preset it was built on, with its rules left in the box:
+    // deleting the shortcut is not a request to stop translating this way.
+    $("#translation-style").value = saved.base;
+    appliedStyleNotes = null;
+    lastStyleValue = saved.base;
+    refreshStyleButtons();
+    toast(t("toast.styleDeleted", { name: saved.name }), "success");
+  } catch (error) {
+    reportError(error);
   }
 }
 
@@ -563,6 +890,11 @@ function restoreTranslationFromJob() {
   if (typeof job.translation_style_notes === "string") {
     $("#translation-style-notes").value = job.translation_style_notes;
   }
+  // These rules came from the project, not from a style this session applied,
+  // so treat them as the user's own: nothing may overwrite them unasked.
+  appliedStyleNotes = null;
+  lastStyleValue = styleSelect.value;
+  refreshStyleButtons();
   const providerSelect = $("#translation-provider");
   if (job.translation_provider && [...providerSelect.options].some((o) => o.value === job.translation_provider)) {
     providerSelect.value = job.translation_provider;
@@ -599,6 +931,14 @@ export async function loadCapabilities() {
     syncModelOptions();
     syncTranslationModelOptions();
     syncStyleOptions(capabilities);
+    await loadSavedStyles();
+    syncVoiceOptions(state.job?.dubbing_voice);
+    if (typeof capabilities.dub_original_gain === "number") {
+      $("#dub-gain").value = String(Math.round(capabilities.dub_original_gain * 100));
+    }
+    $("#dub-shorten").checked = Boolean(capabilities.dub_shorten_with_llm);
+    $("#dub-shorten").disabled = !capabilities.dub_shorten_with_llm;
+    renderGainValue();
     restoreTranslationFromJob();
     renderCapabilityNote(capabilities);
   } catch {
@@ -633,6 +973,13 @@ function refreshButtons() {
   $("#download-translated-srt").disabled = !cued;
   $("#download-vtt").disabled = !cued;
   $("#mux-btn").disabled = !cued || !state.job?.video_available;
+  $("#dub-btn").disabled = blocked || !cued || !state.capabilities?.dubbing_configured;
+  // Same wording rule as translation: a project that already has a dub is never
+  // dubbed again, it is *re*-dubbed, and the confirm says what that costs.
+  $("#dub-label").textContent = t(
+    state.job?.dub_audio_available ? "action.redub" : "action.dub",
+  );
+  $("#mux-dub-btn").disabled = !state.job?.dub_audio_available || !state.job?.video_available;
   // The clash only becomes knowable once a run has detected the source language,
   // so the hint has to follow the job, not just the pickers.
   syncTargetHint();
@@ -666,16 +1013,28 @@ export function mountPipeline() {
   });
   $("#transcription-model").addEventListener("change", updateEngineChip);
   $("#translation-provider").addEventListener("change", () => syncTranslationModelOptions());
+  $("#translation-style").addEventListener("change", applySelectedStyle);
+  $("#style-save").addEventListener("click", saveStyle);
+  $("#style-delete").addEventListener("click", deleteStyle);
   $("#translation-model").addEventListener("change", () => {
     if (state.capabilities) renderCapabilityNote(state.capabilities);
   });
 
+  $("#dub-btn").addEventListener("click", dubProject);
+  $("#dub-gain").addEventListener("input", renderGainValue);
+
   $("#download-source-srt").addEventListener("click", () => downloadSubtitle("source", "srt"));
   $("#download-translated-srt").addEventListener("click", () => downloadSubtitle("translated", "srt"));
   $("#download-vtt").addEventListener("click", () => downloadSubtitle("translated", "vtt"));
-  $("#mux-btn").addEventListener("click", muxVideo);
+  $("#mux-btn").addEventListener("click", () => muxVideo("original"));
+  $("#mux-dub-btn").addEventListener("click", () =>
+    muxVideo($("#dub-keep-original").checked ? "both" : "dubbed"),
+  );
 
   on("job:loaded", restoreTranslationFromJob);
+  // Every SSE tick re-adopts the job, so this is also how the preview appears
+  // the moment a running dub finishes.
+  on("job:loaded", renderDubState);
   // selection:changed too — the resume button names the cue it would start from.
   onAny(["job:loaded", "cues:changed", "selection:changed"], refreshButtons);
   on("capabilities:loaded", refreshButtons);

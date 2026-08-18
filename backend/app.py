@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import jobs as jobs_api
 from .api import media as media_api
+from .api import styles as styles_api
 from .api import system as system_api
 from .config import FRONTEND_DIR, get_logger, settings
 from .jobs import JobConflict, JobNotFound, runner
@@ -93,6 +94,7 @@ async def _job_conflict(_request: Request, exc: JobConflict) -> JSONResponse:
 app.include_router(system_api.router)
 app.include_router(jobs_api.router)
 app.include_router(media_api.router)
+app.include_router(styles_api.router)
 
 
 class RevalidatingStaticFiles(StaticFiles):

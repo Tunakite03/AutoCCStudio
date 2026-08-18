@@ -43,9 +43,7 @@
      /* Timeline */
      --color-clip-face: #2a2e34;
      --color-clip-face-hi: #33383f;
-     --color-wave: #59707d;
      --color-grid-line: rgba(255, 255, 255, 0.06);
-     --color-grid-line-strong: rgba(255, 255, 255, 0.13);
 
      --radius-sm: 5px;
      --radius-md: 8px;
@@ -79,6 +77,14 @@
 
      --focus: 0 0 0 2px var(--color-ground), 0 0 0 3.5px var(--color-accent);
 
+     /* Canvas-only palette. These live here rather than in @theme on purpose:
+        Tailwind drops a theme token no utility class references, and nothing in
+        the markup says `bg-wave`. Left in @theme they compiled away, `cssVar()`
+        returned "", and a canvas ignores an empty fillStyle — so the waveform
+        and the ruler ticks were painted in the default black. */
+     --color-wave: #6f9bb0;
+     --color-grid-line-strong: rgba(255, 255, 255, 0.13);
+
      color-scheme: dark;
 }
 
@@ -109,7 +115,7 @@
 
      --color-clip-face: #ffffff;
      --color-clip-face-hi: #fdf6e6;
-     --color-wave: #93a3ad;
+     --color-wave: #5f8598;
      --color-grid-line: rgba(20, 22, 26, 0.08);
      --color-grid-line-strong: rgba(20, 22, 26, 0.18);
 
@@ -142,7 +148,7 @@
           --color-crit: #bd2f26;
           --color-clip-face: #ffffff;
           --color-clip-face-hi: #fdf6e6;
-          --color-wave: #93a3ad;
+          --color-wave: #5f8598;
           --color-grid-line: rgba(20, 22, 26, 0.08);
           --color-grid-line-strong: rgba(20, 22, 26, 0.18);
           --shadow-pane: 0 14px 36px rgba(20, 22, 26, 0.12);
@@ -503,8 +509,12 @@ svg path.solid {
      padding-top: 8px;
 }
 
-/* Canvas is drawn at scroll width; sticky keeps it in view while the
-   lane scrolls horizontally under the playhead. */
+/* The canvas is only as wide as the scrollport and repaints with the scroll
+   offset baked in, so sticky is what keeps it under the viewport while the lane
+   scrolls beneath it. That makes the lane's own overflow load-bearing: give an
+   ancestor `overflow: hidden` and it becomes this element's scroll container,
+   sticky has nothing left to stick to, and the canvas scrolls away leaving the
+   right-hand side of the lane blank. */
 .lane canvas {
      position: sticky;
      left: 0;

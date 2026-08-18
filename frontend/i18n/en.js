@@ -61,10 +61,31 @@ export const en = {
   "field.styleNotes": "House rules",
   "field.styleNotesPlaceholder":
     "One per line. A term: 大哥 → đại ca\nAnything else reads as an instruction: young voice, no heavy Sino-Vietnamese",
+  "action.saveStyle": "Save as a style…",
+  "action.deleteStyle": "Delete this saved style",
   "action.translateAll": "Translate every cue",
   "action.retranslateAll": "Translate everything again",
   "action.translateFrom": "Translate from the selected cue",
   "action.translateFromCue": "Translate from cue {cue} onwards",
+  "section.dub": "Dubbing",
+  "field.voice": "Voice",
+  "field.dubOriginalGain": "Original audio level",
+  "dub.gainValue": "{percent}%",
+  "dub.shorten": "Let the AI shorten lines that will not fit",
+  "dub.shortenNote":
+    "A line too long to say in time is rewritten shorter by the LLM and recorded again. Turned off, it is simply read faster.",
+  "dub.keepOriginalTrack": "Keep the original audio as a second track on export",
+  "dub.preview": "Play the dub",
+  "dub.previewHint": "The video mutes itself while the dub plays",
+  "dub.noPreview": "No dub yet",
+  "dub.report": "Voiced {voiced}/{total} lines",
+  "dub.reportFits": " · sped up {spedUp} · spilled {spill} · shortened {shortened}",
+  "dub.reportOverflow": " · {count} still too long",
+  "dub.stale":
+    "The subtitles changed after this dub was made, so the recording is out of date. Dub again to catch up — every line that did not change is reused.",
+  "action.dub": "Dub every line",
+  "action.redub": "Dub again",
+  "action.muxDubbed": "Export dubbed MP4",
   "section.export": "Export",
   "export.source": "Source",
   "export.translated": "Translation",
@@ -73,7 +94,7 @@ export const en = {
   "capability.checking": "Checking the system…",
   "capability.unreadable": "Could not read the backend configuration.",
   "capability.note":
-    "Deepgram: {deepgram} · Whisper: {whisper} · Dialogue AI: {dialogue} · Translation: {translation} · ffmpeg: {ffmpeg}",
+    "Deepgram: {deepgram} · Whisper: {whisper} · Dialogue AI: {dialogue} · Translation: {translation} · Dubbing: {dub} · ffmpeg: {ffmpeg}",
   "capability.notInstalled": "not installed",
   "capability.missingKey": "API key missing",
   "capability.notConfigured": "not configured",
@@ -216,6 +237,10 @@ export const en = {
   "status.queueingRerun": "Queueing another recognition run…",
   "status.muxing": "Muxing the subtitle into the video…",
   "status.muxed": "Exported the subtitled video",
+  "status.dubbing": "Dubbing…",
+  "status.dubbed": "Dub finished",
+  "status.dubExporting": "Exporting the dubbed video…",
+  "status.dubbedWithWarning": "Dubbed · {warning}",
   "status.stoppedWith": "Stopped · {kept}",
   "status.subtitlesWithWarning": "Subtitles created · {warning}",
   "status.partialWithWarning": "Partly done · {warning}",
@@ -232,10 +257,16 @@ export const en = {
   "run.listening": "The AI is listening and building timestamps…",
   "run.analyzing": "The AI is reading context and splitting dialogue turns…",
   "run.translating": "The AI is translating cue by cue…",
+  "run.dubbing": "Reading the dialogue out and laying it onto the timeline…",
   "run.cancelTitle": "Stop the running job",
   "action.cancel": "Cancel",
   "action.cancelling": "Stopping…",
   "action.close": "Close",
+  "action.save": "Save",
+  "action.delete": "Delete",
+  "action.overwrite": "Overwrite",
+  "action.replaceNotes": "Replace the rules",
+  "action.keepNotes": "Keep mine",
   "action.agree": "Confirm",
 
   /* ── Toasts ─────────────────────────────────────────────────── */
@@ -248,9 +279,17 @@ export const en = {
   "toast.pickCueToTranslateFrom": "Select the cue to translate from",
   "toast.needCuesToAnalyze": "There have to be cues before analysing",
   "toast.reanalyzing": "Re-analysing dialogue turns without calling Deepgram again",
+  "toast.needCuesToDub": "There has to be dialogue before it can be voiced",
+  "toast.dubQueued": "Dubbing queued",
+  "toast.dubbed": "Dub finished — press play to hear it",
+  "toast.noDubYet": "There is no dub to export yet",
+  "toast.dubExported": "Dubbed video exported",
+  "toast.dubNotConfigured": "Dubbing is not configured on the server",
   "toast.noProject": "No project open",
   "toast.noVideoToMux": "This project has no video to mux into",
   "toast.muxed": "Exported the video with a soft subtitle track",
+  "toast.styleSaved": "Saved the style “{name}”",
+  "toast.styleDeleted": "Deleted the style “{name}”",
   "toast.translationQueued": "The subtitle is queued for translation",
   "toast.translatingFrom": "Resuming the translation from cue {cue}",
   "toast.stopRequested": "Stop requested — waiting for the current step to finish",
@@ -283,6 +322,8 @@ export const en = {
   "job.analysisFailed": "the AI could not analyse the dialogue turns",
   "job.someCuesKept": "some cues were left as they were",
   "job.failed": "The job failed",
+  "job.dubFailed": "The dub could not be produced",
+  "job.dubPartial": "some lines were left silent",
 
   /* ── Confirmations ──────────────────────────────────────────── */
   "confirm.title": "Confirm",
@@ -295,6 +336,13 @@ export const en = {
   "confirm.retranslateNote":
     "{count} cues that already have a translation will be translated from scratch. To keep what is done, select the cue to continue from and use “Translate from cue…”.",
   "confirm.retranslateOk": "Re-translate everything",
+  "confirm.redubTitle": "Dub again?",
+  "confirm.redubNote": "The dub this project already has will be replaced.",
+  "confirm.redubOk": "Dub again",
+  "confirm.staleDubTitle": "Export an out-of-date dub?",
+  "confirm.staleDubNote":
+    "The subtitles changed after this dub was made. The exported file will carry the wording and the timings from before those edits.",
+  "confirm.staleDubOk": "Export anyway",
   "confirm.deleteTitle": "Delete this project?",
   "confirm.deleteNote":
     "The video, the subtitle and the metadata in the project folder will be deleted from disk. This cannot be undone.",
@@ -382,6 +430,21 @@ export const en = {
   "style.genz": "Gen Z, colloquial",
   "style.formal": "Formal (documentary, news)",
 
+  /* ── Styles the user saved ──────────────────────────────────── */
+  "style.savedGroup": "Your styles",
+  "style.saveTitle": "Save as a style",
+  "style.saveNote":
+    "Saves the selected style together with the house rules below, so next time it is one click. Reusing a name overwrites that style.",
+  "style.namePlaceholder": "e.g. Thai drama, light register",
+  "style.overwriteTitle": "Overwrite the existing style?",
+  "style.overwriteNote": "A style by this name already exists. Its rules will be replaced by what is in the box.",
+  "style.deleteTitle": "Delete this style?",
+  "style.deleteNote":
+    "Only the shortcut goes. Projects already translated keep their translation, and the rules stay in the box below.",
+  "style.replaceNotesTitle": "Replace the house rules you wrote?",
+  "style.replaceNotesNote":
+    "The house rules box holds text you typed yourself. Choosing this style replaces it with the style's own rules.",
+
   /* ── Model hints (backend codes) ────────────────────────────── */
   "model.fromEnv": "from .env",
   "model.whisper.tiny": "fast and light",
@@ -405,6 +468,17 @@ export const en = {
   "model.llm.excellent": "excellent translation",
   "model.llm.popular": "widely used",
 
+  /* ── Voices (codes from the backend) ────────────────────────── */
+  "voice.vi.female": "female, Vietnamese",
+  "voice.vi.male": "male, Vietnamese",
+  "voice.en.female": "female, English",
+  "voice.en.male": "male, English",
+  "voice.ja.female": "female, Japanese",
+  "voice.ko.female": "female, Korean",
+  "voice.zh.female": "female, Chinese",
+  "voice.mock": "a stand-in voice, for testing",
+  "voice.fromEnv": "from .env",
+
   /* ── Step names (backend codes) ─────────────────────────────── */
   "op.transcribe": "recognition",
   "op.translate": "subtitle translation",
@@ -412,6 +486,10 @@ export const en = {
   "op.thumbnail": "rendering the thumbnail",
   "op.waveform": "reading the waveform",
   "op.mux": "muxing the subtitle into the video",
+  "op.dub": "dubbing",
+  "op.dubDecode": "decoding the voice track",
+  "op.dubMix": "mixing the dub with the original audio",
+  "op.dubShorten": "shortening lines to fit their cues",
 
   /* ── Progress (backend codes) ───────────────────────────────── */
   "progress.queued": "Waiting for a free worker",
@@ -422,6 +500,9 @@ export const en = {
   "progress.processingResult": "Processing the result from {provider}",
   "progress.analyzingTurns": "Analysing dialogue turns",
   "progress.translated": "Translated {done}/{total} lines",
+  "progress.dubbing": "Voiced {done}/{total} lines",
+  "progress.dubAssembling": "Laying the lines out into one track",
+  "progress.dubMixing": "Mixing with the original audio",
 
   /* ── Errors (backend codes) ─────────────────────────────────── */
   "err.raw": "{text}",
@@ -440,6 +521,7 @@ export const en = {
   "err.job.noVideo": "This job has no video",
   "err.job.videoFileGone": "The video file is no longer in the workspace",
   "err.job.subtitleOnly": "An imported-subtitle job has no video",
+  "err.job.noCuesToDub": "This job has no dialogue to voice yet",
 
   "err.upload.tooLarge": "The file is over the {limitMb} MB limit",
   "err.upload.videoMissing": "No video file was sent",
@@ -462,6 +544,15 @@ export const en = {
   "err.translation.badFromCue": "Invalid starting cue position",
   "err.translation.noCuesFromHere": "There are no cues from that position onwards",
 
+  "err.style.nameMissing": "A style needs a name",
+  "err.style.nameTooLong": "A style name is limited to {limit} characters",
+  "err.style.notesTooLong": "A style's rules are limited to {limit} characters",
+  "err.style.badBase": "Unknown base style",
+  "err.style.nameTaken": "There is already a style called “{name}”",
+  "err.style.tooMany": "At most {limit} styles can be saved",
+  "err.style.notFound": "No such saved style",
+  "err.style.notSaved": "The server could not write the style to disk",
+
   "err.cue.endBeforeStart": "Cue {cue}: end must be greater than start",
   "err.cue.negativeStart": "Cue {cue}: start cannot be negative",
   "err.download.badFormat": "Format has to be srt or vtt",
@@ -473,12 +564,35 @@ export const en = {
   "err.speakerAnalysis.failed":
     "The AI returned no valid cue; the acoustic diarisation was kept instead",
 
+  "err.dub.notConfigured":
+    "Dubbing is not configured. Install edge-tts (pip install -r requirements.txt) and restart the app.",
+  "err.dub.voiceMissing": "No voice selected",
+  "err.dub.badVoice": "That voice name is not valid",
+  "err.dub.badGain": "The original-audio level has to be between 0 and 1",
+  "err.dub.badPreference": "Fitting preference has to be speed or natural",
+  "err.dub.badAudioChoice": "Audio has to be original, dubbed or both",
+  "err.dub.nothingToVoice": "There is nothing to read out",
+  "err.dub.allVoicesFailed": "Not one line could be voiced ({failed} failed)",
+  "err.dub.partial": "{failed}/{total} lines could not be voiced and were left silent",
+  "err.dub.stopped": "Stopped on request",
+  "err.dub.noTrack": "This project has no dub yet",
+  "err.dub.trackFileGone": "The dub file is no longer in the workspace",
+
+  "err.tts.badProvider": "Unknown voice provider: {provider}",
+  "err.tts.edgeMissing": "edge-tts is not installed. Run: pip install -r requirements.txt",
+  "err.tts.badVoice": "That voice name is too long",
+  "err.tts.emptyText": "An empty line cannot be read out",
+  "err.tts.emptyAudio": "The voice provider returned empty audio",
+  "err.tts.timeout": "The voice provider did not answer within {seconds} seconds",
+  "err.tts.requestFailed": "The voice provider failed: {cause}",
+
   "err.ffmpeg.missing": "ffmpeg was not found on PATH",
   "err.ffmpeg.timeout": "ffmpeg ran past {seconds} seconds while {operation}",
   "err.ffmpeg.launchFailed": "ffmpeg could not be launched while {operation}: {cause}",
   "err.ffmpeg.failed": "ffmpeg failed while {operation}: {detail}",
   "err.ffmpeg.noThumbnail": "ffmpeg produced no thumbnail",
   "err.ffmpeg.noMuxedVideo": "ffmpeg produced no subtitled video file",
+  "err.ffmpeg.noDubTrack": "ffmpeg did not produce a dub track",
   "err.media.noAudioTrack": "The video has no audio track",
   "err.muxFailed": "Could not mux the subtitle into the video",
 
@@ -528,4 +642,5 @@ export const en = {
   "err.ai.translationCountMismatch":
     "The model returned {returned} translations for {expected} lines",
   "err.ai.targetLanguageMissing": "Pick a target language before translating",
+  "err.ai.dubShortenNotJson": "The shortening model did not return valid JSON",
 };

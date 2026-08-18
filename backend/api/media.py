@@ -11,7 +11,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from ..jobs import store
-from ..media import FFmpegError, NoAudioTrack, extract_waveform, mux_soft_subtitles, render_thumbnail
+from ..media import (
+    FFmpegError,
+    NoAudioTrack,
+    extract_waveform,
+    mux_dubbed_video,
+    mux_soft_subtitles,
+    render_thumbnail,
+)
 from ..messages import detail
 from ..subtitles import format_subtitle
 
@@ -76,6 +83,17 @@ def job_waveform(job_id: str) -> dict:
     return waveform
 
 
+def _job_dub_path(job_id: str) -> Path:
+    job = store.read(job_id)
+    raw_path = job.get("dub_audio_path")
+    if not raw_path:
+        raise HTTPException(status_code=404, detail=detail("err.dub.noTrack"))
+    path = Path(raw_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=detail("err.dub.trackFileGone"))
+    return path
+
+
 def _parse_range(header: str, file_size: int) -> tuple[int, int] | None:
     if not header.startswith("bytes="):
         return None
@@ -109,11 +127,16 @@ def _iter_file_range(path: Path, start: int, end: int) -> Iterator[bytes]:
             yield chunk
 
 
-@router.get("/{job_id}/video")
-def stream_job_video(job_id: str, request: Request) -> Response:
-    path = _job_video_path(job_id)
+def _ranged_response(path: Path, request: Request, fallback_type: str) -> Response:
+    """Serve a file with byte-range support.
+
+    Shared by the video and the dub track: a player seeking in either one sends
+    the same `Range` header, and answering it with the whole file is what makes
+    a scrub through a long project feel like a download.
+    """
+
     file_size = path.stat().st_size
-    media_type = mimetypes.guess_type(path.name)[0] or "video/mp4"
+    media_type = mimetypes.guess_type(path.name)[0] or fallback_type
     # X-Accel-Buffering: a reverse proxy that buffers this spools the whole
     # range to disk before the player sees a byte, which turns seeking in a
     # multi-gigabyte file into a wait. Declaring it here keeps the deployment's
@@ -152,14 +175,34 @@ def stream_job_video(job_id: str, request: Request) -> Response:
     )
 
 
+@router.get("/{job_id}/video")
+def stream_job_video(job_id: str, request: Request) -> Response:
+    return _ranged_response(_job_video_path(job_id), request, "video/mp4")
+
+
+@router.get("/{job_id}/dub-audio")
+def stream_job_dub_audio(job_id: str, request: Request) -> Response:
+    """The dubbed mix, for listening back before committing to an export."""
+
+    return _ranged_response(_job_dub_path(job_id), request, "audio/mp4")
+
+
 @router.post("/{job_id}/mux")
-def mux_subtitle(job_id: str) -> FileResponse:
+def mux_subtitle(job_id: str, audio: str = "original") -> FileResponse:
     """Burn the translated track in as a soft subtitle and return the file.
+
+    `audio` decides what the export plays: the original track, the dub, or both
+    with the dub as the default one. It defaults to `original`, so an export
+    made before the project was ever dubbed is the same file it always was.
 
     NOTE: this holds the request open for the whole render. It is the one
     long-running operation that is not a background job, because the browser
     downloads the response body directly.
     """
+
+    wanted = audio.strip().lower() or "original"
+    if wanted not in {"original", "dubbed", "both"}:
+        raise HTTPException(status_code=400, detail=detail("err.dub.badAudioChoice"))
 
     job = store.read(job_id)
     if not job.get("video_path"):
@@ -170,14 +213,25 @@ def mux_subtitle(job_id: str) -> FileResponse:
     subtitle_path.write_text(
         format_subtitle(job.get("cues", []), "srt", "translated"), encoding="utf-8-sig"
     )
-    output_path = job_dir / "output_subtitled.mp4"
+
+    stem = Path(job.get("video_name") or "video").stem
     try:
-        mux_soft_subtitles(Path(job["video_path"]), subtitle_path, output_path)
+        if wanted == "original":
+            output_path = job_dir / "output_subtitled.mp4"
+            mux_soft_subtitles(Path(job["video_path"]), subtitle_path, output_path)
+            filename = f"{stem}.subtitled.mp4"
+        else:
+            dub_path = _job_dub_path(job_id)
+            output_path = job_dir / "output_dubbed.mp4"
+            mux_dubbed_video(
+                Path(job["video_path"]),
+                dub_path,
+                subtitle_path,
+                output_path,
+                keep_original_audio=wanted == "both",
+            )
+            filename = f"{stem}.dubbed.mp4"
     except FFmpegError as exc:
         raise _ffmpeg_http_error(exc) from exc
 
-    return FileResponse(
-        output_path,
-        media_type="video/mp4",
-        filename=f"{Path(job.get('video_name') or 'video').stem}.subtitled.mp4",
-    )
+    return FileResponse(output_path, media_type="video/mp4", filename=filename)

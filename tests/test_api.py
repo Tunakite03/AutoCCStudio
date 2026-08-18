@@ -1257,3 +1257,219 @@ def test_a_model_configured_in_env_is_always_offered(monkeypatch):
     assert options[0]["value"] == "ministral-8b-latest"
     assert options[0]["hint"]["code"] == "model.fromEnv"
     assert body["llm_endpoint"] == "api.mistral.ai"
+
+
+# ── Dubbing ──────────────────────────────────────────────────────────
+
+DUB_CUES = [
+    {"id": 1, "start": 0.0, "end": 3.0, "text": "Hello there", "translation": "Xin chào"},
+    {"id": 2, "start": 4.0, "end": 7.0, "text": "Good day", "translation": "Chào buổi sáng"},
+]
+
+
+def dub_job(**fields):
+    """A project with dialogue, ready to be read out by the mock voice."""
+
+    return make_job("subtitle_import", subtitle_name="dub.srt", cues=DUB_CUES, **fields)
+
+
+def test_dubbing_refuses_a_project_with_nothing_to_say():
+    job = make_job("subtitle_import", subtitle_name="empty.srt", cues=[])
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "mock"})
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "err.job.noCuesToDub"
+    finally:
+        cleanup(job["id"])
+
+
+def test_dubbing_rejects_a_voice_engine_that_does_not_exist():
+    job = dub_job()
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "nope"})
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "err.tts.badProvider"
+    finally:
+        cleanup(job["id"])
+
+
+def test_dubbing_rejects_an_original_level_outside_the_mix():
+    job = dub_job()
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "original_gain": 4}
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "err.dub.badGain"
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_dub_run_produces_a_track_and_says_how_every_line_fitted():
+    job = dub_job()
+    try:
+        started = client.post(
+            f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "shorten": False}
+        )
+        assert started.status_code == 200
+        assert started.json()["dubbing_status"] == "pending"
+
+        finished = wait_for_status(job["id"], timeout=60.0)
+        assert finished["status"] == "completed", finished.get("error")
+        assert finished["dubbing_status"] == "completed"
+        assert finished["dub_audio_available"] is True
+        assert finished["dubbing_provider"] == "mock"
+
+        report = finished["dubbing_report"]
+        assert report["voiced_cues"] == 2
+        assert report["failed_cues"] == 0
+        assert sum(report["fits"].values()) == 2
+    finally:
+        cleanup(job["id"])
+
+
+def test_the_dub_can_be_played_back_before_anything_is_exported():
+    job = dub_job()
+    try:
+        assert client.get(f"/api/jobs/{job['id']}/dub-audio").status_code == 404
+
+        client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "shorten": False})
+        assert wait_for_status(job["id"], timeout=60.0)["status"] == "completed"
+
+        played = client.get(f"/api/jobs/{job['id']}/dub-audio")
+        assert played.status_code == 200
+        assert played.content
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_running_dub_will_not_start_a_second_one():
+    job = dub_job(status="processing")
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "mock"})
+        assert response.status_code == 409
+    finally:
+        cleanup(job["id"])
+
+
+def test_export_rejects_an_audio_choice_it_does_not_have():
+    job = dub_job(video_path=str(RUNTIME_DIR / "nothing.mp4"))
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/mux?audio=surround")
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "err.dub.badAudioChoice"
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_dubbed_export_is_refused_before_the_project_has_a_dub():
+    job = dub_job(video_path=str(RUNTIME_DIR / "nothing.mp4"))
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/mux?audio=dubbed")
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "err.dub.noTrack"
+    finally:
+        cleanup(job["id"])
+
+
+def test_capabilities_reports_the_voices_this_install_can_use(monkeypatch):
+    import backend.api.system as system_api
+    import backend.tts as tts_module
+
+    monkeypatch.setattr(
+        tts_module, "settings", replace(tts_module.settings, tts_provider="mock")
+    )
+    monkeypatch.setattr(
+        system_api, "settings", replace(system_api.settings, tts_provider="mock")
+    )
+    body = client.get("/api/capabilities").json()
+
+    assert body["tts_provider"] == "mock"
+    assert body["tts_configured"] is True
+    assert body["dubbing_configured"] is True
+    assert any(voice["value"] == "mock" for voice in body["tts_voices"])
+
+
+def test_dubbing_rejects_a_fitting_preference_that_does_not_exist():
+    job = dub_job()
+    try:
+        response = client.post(
+            f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "prefer": "loud"}
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "err.dub.badPreference"
+    finally:
+        cleanup(job["id"])
+
+
+def test_the_fitting_preference_can_be_chosen_per_run():
+    """Settable per request so both strategies can be compared without a restart."""
+
+    job = dub_job()
+    try:
+        client.post(
+            f"/api/jobs/{job['id']}/dub",
+            json={"provider": "mock", "prefer": "natural", "shorten": False},
+        )
+        finished = wait_for_status(job["id"], timeout=60.0)
+        assert finished["status"] == "completed", finished.get("error")
+        assert finished["dubbing_report"]["prefer"] == "natural"
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_fresh_dub_is_not_reported_as_stale():
+    job = dub_job()
+    try:
+        client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "shorten": False})
+        finished = wait_for_status(job["id"], timeout=60.0)
+        assert finished["dub_audio_available"] is True
+        assert finished["dub_stale"] is False
+    finally:
+        cleanup(job["id"])
+
+
+def test_editing_a_line_after_a_dub_marks_the_recording_out_of_date():
+    """Otherwise the export quietly ships the take from before the edit."""
+
+    job = dub_job()
+    try:
+        client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "shorten": False})
+        assert wait_for_status(job["id"], timeout=60.0)["dub_stale"] is False
+
+        edited = [dict(cue) for cue in DUB_CUES]
+        edited[0]["translation"] = "Chào nhé"
+        saved = client.put(f"/api/jobs/{job['id']}/cues", json={"cues": edited})
+
+        assert saved.status_code == 200
+        assert saved.json()["dub_stale"] is True
+        # The dub is still there to listen to and still exportable — behind a
+        # confirm, not a block. It is out of date, not broken.
+        assert saved.json()["dub_audio_available"] is True
+    finally:
+        cleanup(job["id"])
+
+
+def test_moving_a_cue_after_a_dub_marks_the_recording_out_of_date():
+    job = dub_job()
+    try:
+        client.post(f"/api/jobs/{job['id']}/dub", json={"provider": "mock", "shorten": False})
+        wait_for_status(job["id"], timeout=60.0)
+
+        moved = [dict(cue) for cue in DUB_CUES]
+        moved[1]["start"] = 4.5
+        saved = client.put(f"/api/jobs/{job['id']}/cues", json={"cues": moved})
+
+        assert saved.json()["dub_stale"] is True
+    finally:
+        cleanup(job["id"])
+
+
+def test_a_project_that_was_never_dubbed_is_never_stale():
+    job = dub_job()
+    try:
+        body = client.get(f"/api/jobs/{job['id']}").json()
+        assert body["dub_audio_available"] is False
+        assert body["dub_stale"] is False
+    finally:
+        cleanup(job["id"])

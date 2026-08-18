@@ -14,9 +14,12 @@ from pathlib import Path
 from ..ai import analyze_dialogue_turns, transcribe_video, translate_cues
 from ..cancellation import OperationCancelled
 from ..config import get_logger
+from ..dubbing import CACHE_DIR, cues_fingerprint, dub_cues, policy_from_settings
+from ..media import encode_audio, mix_dub_over_original
 from ..messages import Message
 from .model import (
     PHASE_ANALYZING,
+    PHASE_DUBBING,
     PHASE_TRANSCRIBING,
     PHASE_TRANSLATING,
     clean_cues,
@@ -140,6 +143,98 @@ def _analyze(context: JobContext, cues: list[dict], language: str | None) -> Non
         job["cues"] = analyzed
         _apply_speaker_analysis(job, language, report)
         finish(job)
+
+
+DUB_PREVIEW_NAME = "preview.m4a"
+
+
+def dubbing_task(
+    provider: str,
+    voice: str,
+    *,
+    original_gain: float,
+    prefer: str | None = None,
+    shorten: bool | None = None,
+    llm_model: str | None = None,
+):
+    """Voice every cue, then lay the result over the original audio.
+
+    Two stages with a checkpoint between them: synthesis is the long one and its
+    results are already on disk in the segment cache, so a failure while mixing
+    costs the mix and nothing else.
+    """
+
+    def run(context: JobContext) -> None:
+        job = context.read()
+        context.raise_if_cancelled()
+        with context.edit() as opened:
+            opened["dubbing_status"] = "processing"
+            opened["dubbing_error"] = None
+            opened["dubbing_provider"] = provider
+            opened["dubbing_voice"] = voice
+
+        job_dir = context.store.job_dir(context.job_id)
+        policy = policy_from_settings(**({"prefer": prefer} if prefer else {}))
+        track, report = dub_cues(
+            job.get("cues", []),
+            job_dir=job_dir,
+            voice=voice,
+            provider=provider,
+            policy=policy,
+            target_language=job.get("target_language"),
+            shorten=shorten,
+            llm_model=llm_model,
+            on_progress=_phase_reporter(context, PHASE_DUBBING),
+            stop_check=context.raise_if_cancelled,
+        )
+
+        context.raise_if_cancelled()
+        context.progress(PHASE_DUBBING, message=Message("progress.dubMixing"))
+        preview_path = job_dir / CACHE_DIR / DUB_PREVIEW_NAME
+        video_path = job.get("video_path")
+        if video_path and Path(video_path).exists():
+            mix_dub_over_original(
+                Path(video_path), track, preview_path, original_gain=original_gain
+            )
+        else:
+            # A subtitle-only project has nothing to mix under: the dub is the
+            # whole soundtrack, and it is still worth listening back to.
+            encode_audio(track, preview_path)
+
+        logger.info(
+            "job %s: dub voiced %d/%d cues (%d failed)",
+            context.job_id,
+            report.get("voiced_cues", 0),
+            report.get("total_cues", 0),
+            report.get("failed_cues", 0),
+        )
+
+        with context.edit() as opened:
+            opened["dub_audio_path"] = str(preview_path)
+            opened["dubbing_report"] = report
+            # Fingerprint what was actually voiced, not what the job holds now.
+            # Cue edits are refused while a job runs, so the two agree — and if
+            # that ever stops being true, this reports stale rather than fresh.
+            opened["dubbing_fingerprint"] = cues_fingerprint(job.get("cues", []))
+            _apply_dubbing_status(opened, report)
+            finish(opened)
+
+    return run
+
+
+def _apply_dubbing_status(job: dict, report: dict) -> None:
+    """A dub with silent lines is partial, not broken — the same as analysis."""
+
+    failed = int(report.get("failed_cues", 0))
+    if failed == 0:
+        job["dubbing_status"] = "completed"
+        job["dubbing_error"] = None
+        return
+    job["dubbing_status"] = "partial"
+    job["dubbing_error"] = Message(
+        "err.dub.partial",
+        {"failed": failed, "total": int(report.get("total_cues", 0))},
+    ).as_dict()
 
 
 def translation_task(

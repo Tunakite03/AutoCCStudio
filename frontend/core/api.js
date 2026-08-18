@@ -17,6 +17,9 @@ function failureText(body, status) {
 
 async function request(url, options = {}) {
   const response = await fetch(url, options);
+  // 204 has no body by definition, but FastAPI still labels it as JSON — and
+  // parsing an empty body throws, which turned a successful delete into an error.
+  if (response.status === 204) return null;
   const type = response.headers.get("content-type") || "";
   const body = type.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) throw new Error(failureText(body, response.status));
@@ -52,6 +55,27 @@ export const api = {
     request(`/api/jobs/${jobId}/split-long-cues`, { method: "POST" }),
 
 
+  /** The styles this install's users have saved. Presets ride on capabilities;
+   *  these change whenever somebody saves one, so they have their own call. */
+  styles: () => request("/api/styles"),
+
+  createStyle: (name, base, notes) =>
+    request("/api/styles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, base, notes }),
+    }),
+
+  /** Only the fields given are changed — a rename leaves the rules alone. */
+  updateStyle: (styleId, changes) =>
+    request(`/api/styles/${styleId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }),
+
+  deleteStyle: (styleId) => request(`/api/styles/${styleId}`, { method: "DELETE" }),
+
   /** `fromCue` is 0-based; cues before it keep the translation they already have. */
   translate: (
     jobId,
@@ -75,6 +99,19 @@ export const api = {
       }),
     }),
 
+  /** Read the project aloud. `null` fields mean "use the server's own default". */
+  dub: (jobId, { voice = "", provider = "", originalGain = null, shorten = null } = {}) =>
+    request(`/api/jobs/${jobId}/dub`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voice,
+        provider,
+        original_gain: originalGain,
+        shorten,
+      }),
+    }),
+
   /** Ask the worker to stop. It lands at its next checkpoint, not instantly. */
   cancel: (jobId) => request(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
 
@@ -85,8 +122,9 @@ export const api = {
       body: JSON.stringify({ cues }),
     }),
 
-  async mux(jobId) {
-    const response = await fetch(`/api/jobs/${jobId}/mux`, { method: "POST" });
+  /** `audio` is original | dubbed | both — what the exported MP4 will play. */
+  async mux(jobId, audio = "original") {
+    const response = await fetch(`/api/jobs/${jobId}/mux?audio=${audio}`, { method: "POST" });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(tm(body.detail, "err.muxFailed"));
@@ -95,6 +133,9 @@ export const api = {
   },
 
   videoUrl: (jobId) => `/api/jobs/${jobId}/video`,
+  // Cache-busted by revision: a second dub of the same project is a different
+  // recording at the same URL, and the player would otherwise keep the first.
+  dubAudioUrl: (jobId, revision = 0) => `/api/jobs/${jobId}/dub-audio?v=${revision}`,
   thumbnailUrl: (jobId) => `/api/jobs/${jobId}/thumbnail`,
   eventsUrl: (jobId) => `/api/jobs/${jobId}/events`,
   downloadUrl: (jobId, track, format) => `/api/jobs/${jobId}/download?track=${track}&format=${format}`,

@@ -94,6 +94,30 @@ class Settings:
     # model running flat out.
     llm_min_interval_seconds: float = _float_env("LLM_MIN_INTERVAL_SECONDS", 0.0)
     speaker_analysis_model: str = getenv("SPEAKER_ANALYSIS_MODEL", "")
+    tts_provider: str = getenv("TTS_PROVIDER", "edge")
+    tts_voice: str = getenv("TTS_VOICE", "vi-VN-HoaiMyNeural")
+    # Synthesis is network-bound, so a strictly serial pass would spend most of
+    # an hour-long video waiting. Kept low: the free endpoint throttles a burst
+    # far more harshly than it does a steady stream.
+    tts_concurrency: int = _int_env("TTS_CONCURRENCY", 4)
+    tts_timeout_seconds: int = _int_env("TTS_TIMEOUT_SECONDS", 60)
+    # How loud the original audio stays under the dub. 0 silences it entirely.
+    dub_original_gain: float = _float_env("DUB_ORIGINAL_GAIN", 0.25)
+    # The ceiling on speeding a line up to make it fit its cue. Above ~1.25 the
+    # result stops sounding like a person and starts sounding like a fast-forward.
+    dub_max_speedup: float = _float_env("DUB_MAX_SPEEDUP", 1.25)
+    # How far a line may run past its cue into the silence that follows it.
+    dub_max_spill_seconds: float = _float_env("DUB_MAX_SPILL_SECONDS", 1.2)
+    # Which of those two gets tried first. `speed` keeps the dub tight against
+    # the subtitles; `natural` spends the silence after a cue before it touches
+    # the delivery. Neither is right for every project — a documentary wants
+    # natural, a lecture with dense on-screen text wants speed.
+    dub_prefer: str = getenv("DUB_PREFER", "speed")
+    # The third and last resort for a line that will not fit: have the LLM say
+    # the same thing in fewer words. Costs provider calls, so it can be turned off.
+    dub_shorten_with_llm: bool = getenv("DUB_SHORTEN_WITH_LLM", "true").strip().lower() not in {
+        "0", "false", "no", "off",
+    }
     ffmpeg_binary: str = getenv("FFMPEG_BINARY", "ffmpeg")
     max_upload_mb: int = _int_env("MAX_UPLOAD_MB", 2048)
     log_level: str = getenv("LOG_LEVEL", "INFO")

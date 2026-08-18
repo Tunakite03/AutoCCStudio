@@ -18,6 +18,7 @@ AutoCC là MVP local-first để tạo và biên tập phụ đề cho video:
 - Cảnh báo tốc độ đọc (CPS) ngay trên clip và trong danh sách, theo ngưỡng 17/21 ký tự mỗi giây.
 - Bố cục kéo được: rộng cột trái/phải và cao timeline được nhớ lại giữa các phiên, có giao diện sáng/tối.
 - Xuất SRT/VTT hoặc ghép soft subtitle vào MP4 bằng ffmpeg.
+- Lồng tiếng bản dịch bằng TTS: tự co giãn cho vừa cue, nghe thử trong app, xuất MP4 giữ hoặc bỏ tiếng gốc.
 
 ## Chạy trên Windows
 
@@ -149,6 +150,72 @@ Provider hosted tính giới hạn theo requests/giây và tokens/phút. Gặp H
 giãn nhịp gọi bằng `LLM_MIN_INTERVAL_SECONDS` — với gói free của Mistral (1 request/giây)
 đặt `1.1`. Batch nào đã dịch xong vẫn được ghi xuống đĩa trước khi lỗi xảy ra.
 
+## Lồng tiếng
+
+Sau khi đã có bản dịch, AutoCC đọc từng cue thành tiếng, ghép lại thành một track
+theo đúng mốc thời gian rồi trộn xuống dưới tiếng gốc.
+
+Mặc định dùng `edge-tts` — endpoint neural miễn phí của Microsoft, đã nằm trong
+`requirements.txt`. Cấu hình trong `.env`:
+
+```dotenv
+TTS_PROVIDER=edge
+TTS_VOICE=vi-VN-HoaiMyNeural
+DUB_ORIGINAL_GAIN=0.25
+```
+
+Hai giọng tiếng Việt là `vi-VN-HoaiMyNeural` (nữ) và `vi-VN-NamMinhNeural` (nam).
+`edge-tts --list-voices` liệt kê toàn bộ giọng của provider.
+
+### Khớp thời lượng
+
+Một câu tiếng Việt gần như không bao giờ đọc vừa đúng độ dài cue của nó. AutoCC xử
+lý theo ba tầng, chỉ leo lên tầng sau khi tầng trước không đủ:
+
+1. **Đọc nhanh hơn** — `atempo` tới trần `DUB_MAX_SPEEDUP` (mặc định 1.25). Rẻ nhất
+   và giữ nguyên sync.
+2. **Tràn sang khoảng lặng** — cho câu chạy quá cue tối đa `DUB_MAX_SPILL_SECONDS`
+   giây, miễn là chỗ đó thật sự im lặng và vẫn chừa một khoảng trước cue kế tiếp.
+3. **Nhờ LLM rút gọn** — câu nào hai cách trên vẫn không cứu được thì được viết lại
+   ngắn hơn theo đúng ngân sách ký tự rồi thu lại. Đây là bước duy nhất tốn thêm
+   request nên tắt được bằng `DUB_SHORTEN_WITH_LLM=false`; tắt đi thì câu đó chỉ bị
+   đọc nhanh hết cỡ.
+
+`DUB_PREFER` quyết định thứ tự hai tầng đầu. `speed` (mặc định) bám sát phụ đề: câu
+nào đọc nhanh được thì đọc nhanh, kể cả khi phía sau còn khoảng lặng. `natural` tiêu
+khoảng lặng trước rồi mới đụng tới nhịp đọc — giọng tự nhiên hơn, đổi lại tiếng và
+chữ lệch nhau nhiều hơn. Trên mẫu 20 câu, `speed` cho 8 câu đọc nhanh và 0 câu tràn.
+
+Có thể gửi `prefer` ngay trong request lồng tiếng để so hai kiểu trên cùng một
+project mà không cần khởi động lại server:
+
+```powershell
+curl -X POST "http://127.0.0.1:8000/api/jobs/<job-id>/dub" `
+  -H "Content-Type: application/json" -d '{\"prefer\":\"natural\"}'
+```
+
+### Khi phụ đề đổi sau lúc lồng tiếng
+
+Mỗi lần lồng tiếng, backend lưu vân tay của đúng những gì đã đọc — lời thoại cộng mốc
+thời gian của từng cue có tiếng. Sửa một câu dịch hay kéo một cue sau đó, `dub_stale`
+lập tức thành `true`: panel hiện cảnh báo, và bấm xuất MP4 lồng tiếng sẽ phải xác nhận
+trước. Bản thu cũ không bị xóa và vẫn xuất được — nó lỗi thời chứ không hỏng — nhưng
+không còn xuất nhầm mà không hay biết.
+
+Bảng thống kê sau mỗi lần chạy nói rõ có bao nhiêu câu rơi vào từng tầng, và bao
+nhiêu câu vẫn quá dài sau cả ba.
+
+### Cache và xuất file
+
+Mỗi câu đã đọc được lưu trong `runtime/<job>/dub/` theo hash của
+provider + giọng + nội dung. Sửa một cue rồi lồng tiếng lại chỉ tốn đúng câu đó;
+bấm Dừng giữa chừng rồi chạy tiếp cũng vậy. Xóa project là xóa luôn cache.
+
+Nghe thử ngay trong app bằng thanh audio ở panel Lồng tiếng — video tự tắt tiếng và
+chạy theo. Khi xuất, **Xuất MP4 lồng tiếng** ghép track lồng tiếng làm audio mặc
+định; tick *Giữ tiếng gốc thành track phụ* thì file MP4 mang cả hai track để người
+xem tự chọn.
+
 ## Kiểm tra nhanh
 
 ```powershell
@@ -209,6 +276,8 @@ backend/jobs/tasks.py     ba luồng việc nền: nhận dạng, phân tích l�
 backend/media.py          mọi lệnh gọi ffmpeg + probe media
 backend/subtitles.py      parser/formatter SRT + VTT
 backend/ai.py             adapter faster-whisper, Deepgram + LLM tương thích OpenAI
+backend/tts.py            adapter giọng đọc (edge-tts + provider mock cho test)
+backend/dubbing.py        khớp câu vào cue, cache segment, ghép track lồng tiếng
 runtime/<job-id>/         video, subtitle, waveform.json và metadata tạm thời
 ```
 

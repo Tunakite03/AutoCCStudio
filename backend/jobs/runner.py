@@ -158,7 +158,7 @@ class JobRunner:
             # Nothing may escape: an unhandled error here would leave the job on
             # "processing" forever and every SSE client hanging on it.
             logger.exception("job %s: %s failed", job_id, operation)
-            self._fail(job_id, exc)
+            self._fail(job_id, exc, operation)
             return
         finally:
             # Pool threads outlive the run; a stale check would answer for the
@@ -180,15 +180,27 @@ class JobRunner:
                     job["speaker_analysis_error"] = Message(
                         "err.speakerAnalysis.stopped"
                     ).as_dict()
+                if job.get("dubbing_status") in {"pending", "processing"}:
+                    job["dubbing_status"] = "cancelled"
+                    job["dubbing_error"] = Message("err.dub.stopped").as_dict()
         except JobNotFound:
             return
 
-    def _fail(self, job_id: str, exc: Exception) -> None:
+    def _fail(self, job_id: str, exc: Exception, operation: str = "") -> None:
         try:
             with self._store.edit(job_id) as job:
                 job["status"] = STATUS_ERROR
                 job["error"] = describe_error(exc)
                 job["progress"] = None
+                # A failed dub leaves the per-step status saying "processing"
+                # otherwise, and the panel keeps showing a spinner under a job
+                # that has already stopped.
+                if operation == "dubbing" and job.get("dubbing_status") in {
+                    "pending",
+                    "processing",
+                }:
+                    job["dubbing_status"] = "failed"
+                    job["dubbing_error"] = describe_error(exc)
         except JobNotFound:
             return
 

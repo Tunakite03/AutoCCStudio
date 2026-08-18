@@ -26,6 +26,9 @@ STYLE_NEUTRAL = "neutral"
 # prompt: the glossary rides along on every single batch.
 PINNED_TERM_LIMIT = 40
 TERM_LENGTH_LIMIT = 60
+# How much free-text style a single run may carry. Lives here rather than at the
+# route because a saved style is applied *as* these notes and has to fit too.
+STYLE_NOTES_LIMIT = 2000
 # One separator per line, and never ":" — prose uses it far too often.
 TERM_SEPARATORS = ("→", "->", "=>", "=")
 

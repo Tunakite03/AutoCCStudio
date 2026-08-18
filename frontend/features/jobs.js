@@ -66,9 +66,11 @@ function renderProgress(job) {
     : tm(job.progress?.message) ||
       (job.kind === "transcription" && !cues().length
         ? t("run.listening")
-        : job.speaker_analysis_status === "processing"
-          ? t("run.analyzing")
-          : t("run.translating"));
+        : job.dubbing_status === "processing" || job.dubbing_status === "pending"
+          ? t("run.dubbing")
+          : job.speaker_analysis_status === "processing"
+            ? t("run.analyzing")
+            : t("run.translating"));
   $("#cancel-job-btn").disabled = stopping;
   $("#cancel-job-label").textContent = t(stopping ? "action.cancelling" : "action.cancel");
   setStatus(t(stopping ? "status.stopping" : "status.processing"), "busy");
@@ -135,8 +137,13 @@ export function stopEvents() {
   eventSource = null;
 }
 
-export function watchJob(jobId) {
+// Which run this stream is following. The job itself cannot say: a translation
+// finishing looks exactly like a dub finishing once both statuses are on it.
+let watchedOperation = "";
+
+export function watchJob(jobId, operation = "") {
   stopEvents();
+  watchedOperation = operation;
   const source = new EventSource(api.eventsUrl(jobId));
   eventSource = source;
 
@@ -181,6 +188,10 @@ function onJobCancelled(job) {
 
 function onJobCompleted(job) {
   stopEvents();
+  // A dub changes no cue, so the edit history it took to get here is still the
+  // history of this project — and there is no transcript to report on either.
+  if (watchedOperation === "dubbing") return onDubCompleted(job);
+
   resetHistory(); // the AI rewrote every cue — older snapshots no longer belong to this take
   setSaveState(t("save.saved"), "saved");
   if (job.speaker_analysis_status === "failed") {
@@ -206,6 +217,17 @@ function onJobCompleted(job) {
     toast(t("toast.doneCues", { count: job.cues.length, extra }), "success");
   }
   if (isVideoReady()) timeline.fit();
+}
+
+function onDubCompleted(job) {
+  if (job.dubbing_status === "partial") {
+    const warning = tm(job.dubbing_error, "job.dubPartial");
+    setStatus(t("status.dubbedWithWarning", { warning }), "error");
+    toast(t("status.dubbedWithWarning", { warning }), "error");
+    return;
+  }
+  setStatus(t("status.dubbed"));
+  toast(t("toast.dubbed"), "success");
 }
 
 /* ── Persistence ──────────────────────────────────────────────── */
