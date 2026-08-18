@@ -2,27 +2,30 @@
 
 **Tiếng Việt** | [English](README_EN.md)
 
-AutoCC là MVP local-first để tạo và biên tập phụ đề cho video:
+AutoCC là ứng dụng local-first để tạo, chỉnh sửa, dịch thuật và lồng tiếng phụ đề video:
 
-- Import file `.srt` hoặc `.vtt`.
-- Nhận dạng bằng `faster-whisper` local hoặc Deepgram Nova-3 cloud.
-- Deepgram hỗ trợ diarization âm thanh; AI ngữ cảnh có thể tách thêm lượt thoại bên trong cue bằng xuống dòng, không hiện nhãn `[S1]`/`[S2]`.
-- Dịch từng cue qua endpoint LLM tương thích OpenAI (`/chat/completions`), nên có thể dùng Ollama, LM Studio hoặc một API cloud.
-- Theo dõi transcription/translation realtime bằng Server-Sent Events (SSE), có heartbeat và tự reconnect.
-- Giao diện dạng app dựng phim: xem trước video kèm phụ đề chồng lên hình, timeline kéo thả có dạng sóng audio.
-- Màn hình **Dự án** quản lý mọi project trong workspace: ảnh đại diện, tiến độ dịch, dung lượng đĩa, tìm kiếm, lọc và xóa.
-- Mở lại project cũ là chạy lại nhận dạng được ngay trên video server đã giữ, không phải tải file lên lần nữa.
-- Kéo thân clip để dời cue, kéo mép để co giãn, cắt/gộp cue tại playhead, hít dính vào mép cue và playhead.
-- Đang phát mà kéo timeline thì video tạm dừng theo cử chỉ và tự chạy tiếp khi thả chuột.
-- Hoàn tác / làm lại nhiều bước cho mọi thao tác sửa cue; một tràng gõ phím gộp thành một bước.
-- Cảnh báo tốc độ đọc (CPS) ngay trên clip và trong danh sách, theo ngưỡng 17/21 ký tự mỗi giây.
-- Bố cục kéo được: rộng cột trái/phải và cao timeline được nhớ lại giữa các phiên, có giao diện sáng/tối.
-- Xuất SRT/VTT hoặc ghép soft subtitle vào MP4 bằng ffmpeg.
-- Lồng tiếng bản dịch bằng TTS: tự co giãn cho vừa cue, nghe thử trong app, xuất MP4 giữ hoặc bỏ tiếng gốc.
+- **Import phụ đề:** Hỗ trợ định dạng `.srt` và `.vtt`.
+- **Nhận dạng giọng nói (STT):** Nhận dạng offline bằng `faster-whisper` local hoặc cloud qua Deepgram Nova-3.
+- **Phân tách người nói (Diarization):** Hỗ trợ diarization âm thanh từ Deepgram; AI ngữ cảnh phân tích hội thoại để tách thêm lượt thoại bên trong cue bằng dấu xuống dòng mà không chèn nhãn `[S1]`/`[S2]` nhân tạo.
+- **Dịch thuật AI:** Dịch từng batch qua endpoint LLM tương thích chuẩn OpenAI (`/chat/completions`), kết nối mượt mà với Ollama, LM Studio hoặc bất kỳ endpoint hosted API nào.
+- **Phong cách dịch & Thuật ngữ riêng:** Presets phong phú (Hán Việt, Phim Hàn, Anime Nhật, GenZ, Trang trọng), ghim glossary thuật ngữ, hỗ trợ lưu và quản lý Custom Translation Styles.
+- **Lồng tiếng tự động (TTS Dubbing):** Đọc bản dịch bằng Microsoft Edge TTS hoặc mock voice; tự động co giãn thời lượng khớp cue qua 3 tầng (Tăng tốc PCM, Tràn khoảng lặng, Rút gọn bằng LLM); trộn audio đè lên video gốc kèm Audio Ducking.
+- **Theo dõi tiến độ thời gian thực:** Giám sát tiến trình transcription, translation, diarization và dubbing trực tiếp qua Server-Sent Events (SSE) với cơ chế tự động kết nối lại (auto-reconnect).
+- **Giao diện dựng phim chuyên nghiệp (NLE UI):** Màn hình xem trước video kèm phụ đề responsive, timeline tương tác kéo thả mượt mà với hiển thị dạng sóng âm thanh (waveform).
+- **Quản lý Dự án (Dashboard):** Màn hình danh sách dự án trực quan: xem ảnh đại diện thumbnail, thời lượng, tiến độ dịch, dung lượng đĩa, tìm kiếm, lọc và xóa dự án.
+- **Chạy lại phiên âm tức thời:** Mở lại project cũ và chạy lại nhận dạng ngay trên video đã lưu ở server mà không cần tải lại file.
+- **Biên tập Timeline linh hoạt:** Kéo thân clip để dời mốc thời gian, kéo mép để co giãn, cắt/gộp cue tại playhead, hít dính (snapping) thông minh vào mép cue và playhead.
+- **Tua mượt mà:** Kéo timeline khi đang phát sẽ tạm dừng video theo cử chỉ và tự động phát tiếp khi thả chuột.
+- **Lịch sử Undo / Redo đa cấp:** Hoàn tác và làm lại mọi thao tác chỉnh sửa; các đợt gõ phím nhanh được gộp thông minh thành một bước.
+- **Cảnh báo tốc độ đọc (CPS):** Cảnh báo trực quan Characters-Per-Second ngay trên clip timeline và thanh inspector theo ngưỡng 17/21 ký tự/giây.
+- **Giao diện tùy biến & Đa ngôn ngữ:** Nhớ kích thước các cột và chiều cao timeline giữa các phiên làm việc, hỗ trợ giao diện Sáng / Tối và song ngữ Tiếng Việt / Tiếng Anh.
+- **Xuất file & Muxing:** Xuất file SRT/VTT chuẩn hoặc ghép soft subtitle / audio lồng tiếng vào video MP4 bằng FFmpeg.
+
+---
 
 ## Chạy trên Windows
 
-Yêu cầu Python 3.12. App dùng `ffmpeg` trong `PATH` nếu có; nếu không, nó sẽ thử dùng binary bundled từ `imageio-ffmpeg` cho bước ghép subtitle.
+**Yêu cầu:** Python 3.10 trở lên (khuyên dùng Python 3.12). Ứng dụng tự động tìm `ffmpeg` trong `PATH` hệ thống; nếu chưa cài, backend sẽ tự động dùng binary kèm theo từ `imageio-ffmpeg`.
 
 ```powershell
 cd E:\Project2025\AutoCC
@@ -30,13 +33,15 @@ Copy-Item .env.example .env
 .\run.ps1
 ```
 
-Mở [http://127.0.0.1:8000](http://127.0.0.1:8000).
+Mở trình duyệt tại [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-Lần đầu chạy `faster-whisper`, model sẽ được tải về cache của máy. Có thể chọn `tiny`, `base`, `small`, `medium` hoặc `large-v3`; `small` là lựa chọn cân bằng cho CPU.
+> **Lưu ý:** Lần đầu chạy với `faster-whisper`, model sẽ được tải về cache của máy. Bạn có thể chọn `tiny`, `base`, `small`, `medium` hoặc `large-v3`; `small` là lựa chọn cân bằng tối ưu cho CPU.
+
+---
 
 ## Nhận dạng nhiều người bằng Deepgram
 
-Tạo API key trong Deepgram, sau đó cấu hình `.env`:
+Tạo API key trên Deepgram, sau đó cấu hình trong `.env`:
 
 ```dotenv
 TRANSCRIPTION_PROVIDER=deepgram
@@ -45,48 +50,41 @@ DEEPGRAM_MODEL=nova-3
 DEEPGRAM_DIARIZE_MODEL=latest
 ```
 
-Khởi động lại AutoCC. Request gửi video tới API `/v1/listen` với `utterances=true`,
-`smart_format=true` và diarizer mới nhất. Nếu để ngôn ngữ là “Tự nhận diện”, app dùng
-language detection; chọn ngôn ngữ cụ thể sẽ khóa model theo mã ngôn ngữ đó.
+Khởi động lại AutoCC. Ứng dụng gửi audio tới API `/v1/listen` với `utterances=true`, `smart_format=true` và diarizer mới nhất. Nếu để ngôn ngữ là “Tự nhận diện”, app dùng tính năng phát hiện ngôn ngữ tự động; chọn ngôn ngữ cụ thể sẽ khóa model theo mã ngôn ngữ đó.
 
-Khi chọn Deepgram trên giao diện, dropdown model đổi sang `nova-3`, `nova-2`,
-`nova-2-meeting` hoặc `nova-2-video`. `nova-3` phù hợp nhất cho video thông thường
-và nhiều người; hai model Meeting/Video là lựa chọn chuyên biệt cho audio English.
-Model được chọn áp dụng riêng cho từng job và được lưu trong metadata của job.
+Khi chọn Deepgram trên giao diện, dropdown model sẽ hiển thị `nova-3`, `nova-2`, `nova-2-meeting` hoặc `nova-2-video`. `nova-3` phù hợp nhất cho video thông thường và nhiều người nói.
 
-Tùy chọn **AI phân tích lượt thoại** xử lý theo hai tầng. Trước tiên backend dùng
-`speaker` và `speaker_confidence` ở từng từ của Deepgram để chèn xuống dòng theo
-bằng chứng giọng nói. Sau đó LLM đọc ngữ cảnh hỏi/đáp để bổ sung các ranh giới còn
-mơ hồ, kể cả khi Deepgram gộp nhiều người vào một utterance.
+### AI phân tích lượt thoại hai tầng
 
-Model chỉ được phép chèn thêm ký tự xuống dòng; backend đối chiếu lại toàn bộ chữ và
-dấu câu, đồng thời không cho LLM xóa ranh giới đã xác định từ audio. Kết quả LLM được
-gắn `cue_id`, chia batch nhỏ và retry riêng cue bị thiếu/sai. Cue vẫn không đạt sau
-retry được giữ nguyên thay vì làm hỏng cả batch, và giao diện báo trạng thái partial.
-Nút **Phân tích lại lượt thoại** chạy lại riêng bước LLM trên cue hiện tại, không upload
-video và không gọi lại Deepgram, nên có thể thử lại sau khi đổi model/prompt mà không
-tốn thêm một lượt transcription.
+1. **Tầng 1 (Acoustic):** Backend sử dụng thông tin `speaker` và `speaker_confidence` ở từng từ của Deepgram để chèn ngắt dòng theo giọng nói.
+2. **Tầng 2 (Contextual LLM):** LLM phân tích ngữ cảnh hội thoại (hỏi/đáp, đại từ) để bổ sung ranh giới khi Deepgram gộp nhiều người vào một câu.
 
-## Dịch bằng LLM
+Model chỉ được phép chèn thêm ký tự xuống dòng; backend đối chiếu lại toàn bộ nội dung ký tự để đảm bảo không bị mất chữ. Nút **Phân tích lại lượt thoại** cho phép chạy lại riêng bước này trên các cue hiện tại mà không tốn chi phí gọi lại STT.
 
-Mặc định app trỏ tới Ollama:
+---
+
+## Dịch thuật bằng AI (LLM)
+
+Mặc định ứng dụng kết nối tới Ollama local:
 
 ```powershell
 ollama pull qwen2.5:7b
 ollama serve
 ```
 
-Nếu dùng endpoint khác, chỉnh `.env`:
+Nếu sử dụng endpoint LLM khác (LM Studio, vLLM hoặc Cloud API như OpenAI, DeepSeek, Mistral), cấu hình trong `.env`:
 
 ```dotenv
-LLM_BASE_URL=https://your-endpoint.example/v1
-LLM_API_KEY=your-key
-LLM_MODEL=your-model
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=[key-1, key-2]
+LLM_MODEL=gpt-4o-mini
 # Không đặt thì dùng lại LLM_MODEL
 SPEAKER_ANALYSIS_MODEL=
 ```
 
-Có thể dịch local bằng Transformers cho model cụ thể, ví dụ English → Vietnamese:
+> **Mẹo xoay vòng API Keys:** Bạn có thể điền nhiều key dạng mảng `[key1, key2]`. Hệ thống sẽ tự động xoay vòng Round-Robin và tự động đưa key vào chế độ Cooldown 60s khi gặp lỗi 429 (Rate Limit).
+
+Có thể dịch offline bằng model Transformers chuyên biệt (ví dụ En $\rightarrow$ Vi):
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-translation-local.txt
@@ -99,64 +97,27 @@ TRANSFORMERS_TARGET_LANGUAGE=Tiếng Việt
 TRANSFORMERS_DEVICE=auto
 ```
 
-Model local chỉ phù hợp với cặp ngôn ngữ mà model hỗ trợ; với nhiều ngôn ngữ hoặc giữ văn phong dài, dùng LLM-compatible provider sẽ linh hoạt hơn.
+### Cơ chế Contextual Batching & Khôi phục lỗi JSON
 
-Mỗi batch dịch gửi đi một object JSON có khóa là số thứ tự dòng và nhận về đúng bộ khóa
-đó, nên model gộp hai dòng ngắn thành một câu cũng không làm lệch cả batch: dòng bị thiếu
-được dịch lại riêng, chỉ khi lần lẻ đó cũng hỏng mới báo lỗi. Các xuống dòng giữa người
-nói được giữ nguyên khi dịch; timing luôn được giữ ở backend.
+- **Ngữ cảnh liên tục:** Mỗi batch gửi kèm 4 câu trước (gồm cả bản dịch) và 2 câu sau làm ngữ cảnh chỉ đọc, giúp LLM dịch chuẩn danh xưng của nhân vật.
+- **Thuật ngữ xuyên suốt (Glossary):** Bảng thuật ngữ nhân vật được tự động tích lũy và truyền sang các batch kế tiếp (tối đa 40 mục).
+- **JSON Repair Engine:** Phản hồi từ LLM được đối soát theo đúng mã dòng. Nếu LLM trả sai cấu trúc hoặc gộp dòng, backend tự động cô lập và thử lại câu bị thiếu mà không làm hỏng cả batch.
 
-Phim là một mạch hội thoại, nên batch không được dịch tách rời: mỗi request kèm 4 dòng
-trước (cả bản dịch vừa tạo ra) và 2 dòng sau làm ngữ cảnh chỉ-để-đọc, kèm mã người nói
-lấy từ diarization để cùng một nhân vật giữ nguyên giọng điệu và cách xưng hô. Model đồng
-thời trả về một bảng thuật ngữ (tên riêng, xưng hô giữa từng cặp nhân vật, từ lặp lại)
-được mang sang các batch sau, giới hạn 40 mục để prompt không phình theo độ dài phim. Dòng
-phải dịch lại lẻ cũng nhận đúng ngữ cảnh đó — dịch một câu trơ trọi chính là thứ cần
-tránh. Không tốn thêm lượt gọi nào, chỉ tốn thêm token đầu vào mỗi request.
+### Phong cách dịch & Custom Styles
 
-### Phong cách dịch
+- **Presets:** `Tự động theo ngôn ngữ nguồn` (Tiếng Trung $\rightarrow$ Hán Việt, Tiếng Hàn $\rightarrow$ Oppa/Unnie, Tiếng Nhật $\rightarrow$ Senpai/-san), `Trung tính`, `GenZ / Khẩu ngữ`, `Trang trọng`.
+- **Quy tắc riêng & Glossary ghim:** Nhập quy tắc dạng `大哥 → đại ca` hoặc `陛下 = bệ hạ` để ghi đè thuật ngữ.
+- **Lưu Preset tùy chỉnh:** Bạn có thể lưu phong cách vừa tạo vào hệ thống (lưu tại `runtime/styles.json`) để tái sử dụng cho các dự án sau.
 
-Bản dịch đúng nghĩa vẫn có thể sai vibe: `大哥` nghĩa là "anh cả", nhưng khán giả phim
-Trung chờ đợi "đại ca". Ô **Phong cách** trong khối Dịch chọn bộ quy tắc đó, mặc định
-`Tự động theo ngôn ngữ nguồn` — tiếng Trung ra preset Hán Việt, tiếng Hàn giữ
-oppa/unnie/sunbae, tiếng Nhật giữ senpai và hậu tố -san/-chan, còn lại là trung tính.
-Ngoài ra có `GenZ, khẩu ngữ` và `Trang trọng` để chọn tay khi cần.
+Preset mặc định nằm trong [backend/domain/translation/style.py](backend/domain/translation/style.py).
 
-Mỗi preset gồm hai phần: các quy tắc được chèn thẳng vào prompt, và một bảng thuật ngữ
-được **ghim** vào glossary ngay từ batch đầu — model được phép bổ sung thuật ngữ mới
-trong lúc dịch nhưng không được sửa hay loại bỏ mục đã ghim.
+---
 
-Ô **Quy tắc riêng** là phần tùy biến của bạn, mỗi dòng một ý:
+## Lồng tiếng tự động (TTS Dubbing)
 
-```text
-大哥 → đại ca
-陛下 = bệ hạ
-Giọng trẻ, tránh từ Hán Việt nặng ở cảnh hiện đại
-```
+Sau khi có bản dịch, AutoCC tổng hợp giọng đọc cho từng câu, căn khớp thời lượng và ghép thành track audio hoàn chỉnh đè lên video.
 
-Dòng có `→`, `->`, `=>` hoặc `=` được đọc thành thuật ngữ ghim và **đè lên preset**; dòng
-còn lại thành một quy tắc trong prompt. Muốn trộn hai phong cách (ví dụ phim Trung nhưng
-lời thoại kiểu GenZ) thì chọn preset gần nhất rồi viết phần còn lại vào đây. Giới hạn 2000
-ký tự và 40 thuật ngữ ghim, cắt bớt preset trước khi cắt của bạn. Lựa chọn được lưu theo
-project nên mở lại thấy đúng thứ đã dùng.
-
-Preset nằm trong [backend/translation_style.py](backend/translation_style.py) — thêm ngôn
-ngữ hoặc thể loại mới chỉ là thêm một mục vào `STYLES` (và `LANGUAGE_STYLES` nếu muốn nó
-được chọn tự động).
-
-Provider hosted tính giới hạn theo requests/giây và tokens/phút. Gặp HTTP 429, app chờ
-đúng khoảng thời gian ghi trong header `Retry-After` (không có thì backoff nhân đôi, tối
-đa một phút) với ngân sách riêng `HTTP_RATE_LIMIT_RETRIES`. Nếu vẫn bị chặn thường xuyên,
-giãn nhịp gọi bằng `LLM_MIN_INTERVAL_SECONDS` — với gói free của Mistral (1 request/giây)
-đặt `1.1`. Batch nào đã dịch xong vẫn được ghi xuống đĩa trước khi lỗi xảy ra.
-
-## Lồng tiếng
-
-Sau khi đã có bản dịch, AutoCC đọc từng cue thành tiếng, ghép lại thành một track
-theo đúng mốc thời gian rồi trộn xuống dưới tiếng gốc.
-
-Mặc định dùng `edge-tts` — endpoint neural miễn phí của Microsoft, đã nằm trong
-`requirements.txt`. Cấu hình trong `.env`:
+Mặc định sử dụng `edge-tts` (Microsoft Neural TTS miễn phí). Cấu hình trong `.env`:
 
 ```dotenv
 TTS_PROVIDER=edge
@@ -164,59 +125,21 @@ TTS_VOICE=vi-VN-HoaiMyNeural
 DUB_ORIGINAL_GAIN=0.25
 ```
 
-Hai giọng tiếng Việt là `vi-VN-HoaiMyNeural` (nữ) và `vi-VN-NamMinhNeural` (nam).
-`edge-tts --list-voices` liệt kê toàn bộ giọng của provider.
+Các giọng đọc tiếng Việt chất lượng cao: `vi-VN-HoaiMyNeural` (Nữ) và `vi-VN-NamMinhNeural` (Nam).
 
-### Khớp thời lượng
+### Thuật toán căn khớp thời lượng (Fit Segment) 3 cấp
 
-Một câu tiếng Việt gần như không bao giờ đọc vừa đúng độ dài cue của nó. AutoCC xử
-lý theo ba tầng, chỉ leo lên tầng sau khi tầng trước không đủ:
+1. **Đọc nhanh hơn (`retime_pcm`):** Tăng tốc độ đọc lên tới trần `DUB_MAX_SPEEDUP` (mặc định `1.25x`), giữ nguyên cao độ âm thanh.
+2. **Tràn sang khoảng lặng (`spill`):** Cho phép câu nói kéo dài sang khoảng lặng phía sau tối đa `DUB_MAX_SPILL_SECONDS` (mặc định `1.2s`).
+3. **Rút ngắn câu bằng LLM (`shorten_with_llm`):** Tự động nhờ LLM viết lại câu ngắn hơn theo số ký tự cho phép rồi thu âm lại (tắt được bằng `DUB_SHORTEN_WITH_LLM=false`).
 
-1. **Đọc nhanh hơn** — `atempo` tới trần `DUB_MAX_SPEEDUP` (mặc định 1.25). Rẻ nhất
-   và giữ nguyên sync.
-2. **Tràn sang khoảng lặng** — cho câu chạy quá cue tối đa `DUB_MAX_SPILL_SECONDS`
-   giây, miễn là chỗ đó thật sự im lặng và vẫn chừa một khoảng trước cue kế tiếp.
-3. **Nhờ LLM rút gọn** — câu nào hai cách trên vẫn không cứu được thì được viết lại
-   ngắn hơn theo đúng ngân sách ký tự rồi thu lại. Đây là bước duy nhất tốn thêm
-   request nên tắt được bằng `DUB_SHORTEN_WITH_LLM=false`; tắt đi thì câu đó chỉ bị
-   đọc nhanh hết cỡ.
+### Cảnh báo lệch giọng khi sửa phụ đề (`dub_stale`)
 
-`DUB_PREFER` quyết định thứ tự hai tầng đầu. `speed` (mặc định) bám sát phụ đề: câu
-nào đọc nhanh được thì đọc nhanh, kể cả khi phía sau còn khoảng lặng. `natural` tiêu
-khoảng lặng trước rồi mới đụng tới nhịp đọc — giọng tự nhiên hơn, đổi lại tiếng và
-chữ lệch nhau nhiều hơn. Trên mẫu 20 câu, `speed` cho 8 câu đọc nhanh và 0 câu tràn.
+Mỗi lần lồng tiếng, hệ thống lưu mã băm SHA-256 (`dubbing_fingerprint`) của toàn bộ lời thoại và mốc thời gian. Nếu sau đó bạn chỉnh sửa phụ đề, giao diện sẽ hiện cảnh báo phụ đề đã thay đổi so với bản lồng tiếng cũ.
 
-Có thể gửi `prefer` ngay trong request lồng tiếng để so hai kiểu trên cùng một
-project mà không cần khởi động lại server:
+---
 
-```powershell
-curl -X POST "http://127.0.0.1:8000/api/jobs/<job-id>/dub" `
-  -H "Content-Type: application/json" -d '{\"prefer\":\"natural\"}'
-```
-
-### Khi phụ đề đổi sau lúc lồng tiếng
-
-Mỗi lần lồng tiếng, backend lưu vân tay của đúng những gì đã đọc — lời thoại cộng mốc
-thời gian của từng cue có tiếng. Sửa một câu dịch hay kéo một cue sau đó, `dub_stale`
-lập tức thành `true`: panel hiện cảnh báo, và bấm xuất MP4 lồng tiếng sẽ phải xác nhận
-trước. Bản thu cũ không bị xóa và vẫn xuất được — nó lỗi thời chứ không hỏng — nhưng
-không còn xuất nhầm mà không hay biết.
-
-Bảng thống kê sau mỗi lần chạy nói rõ có bao nhiêu câu rơi vào từng tầng, và bao
-nhiêu câu vẫn quá dài sau cả ba.
-
-### Cache và xuất file
-
-Mỗi câu đã đọc được lưu trong `runtime/<job>/dub/` theo hash của
-provider + giọng + nội dung. Sửa một cue rồi lồng tiếng lại chỉ tốn đúng câu đó;
-bấm Dừng giữa chừng rồi chạy tiếp cũng vậy. Xóa project là xóa luôn cache.
-
-Nghe thử ngay trong app bằng thanh audio ở panel Lồng tiếng — video tự tắt tiếng và
-chạy theo. Khi xuất, **Xuất MP4 lồng tiếng** ghép track lồng tiếng làm audio mặc
-định; tick *Giữ tiếng gốc thành track phụ* thì file MP4 mang cả hai track để người
-xem tự chọn.
-
-## Kiểm tra nhanh
+## Kiểm tra nhanh & Chạy Tests
 
 ```powershell
 py -3.12 -m pip install -r requirements.txt
@@ -224,142 +147,129 @@ py -3.12 -m pytest
 py -3.12 -m compileall backend
 ```
 
-## Phát triển giao diện (Tailwind CSS)
+---
 
-Giao diện sử dụng Tailwind CSS v4 qua binary độc lập `tailwindcss.exe` (không cần Node.js/npm):
+## Phát triển giao diện (Tailwind CSS v4)
 
-- **Khi sửa giao diện (Watch mode):**
+Giao diện sử dụng Tailwind CSS v4 standalone binary (không cần cài đặt Node.js/npm):
+
+- **Chế độ phát triển (Watch mode):**
   ```powershell
   .\build-css.ps1 -Watch
   ```
-- **Khi build nén (Production):**
+- **Build tối ưu (Production):**
   ```powershell
   .\build-css.ps1
   ```
-- File nguồn: `frontend/input.css` (gồm `@import "tailwindcss";` và `@import "./custom.css";`).
-- File đích: `frontend/styles.css` (được load trực tiếp bởi trình duyệt).
+- File nguồn: `frontend/styles/input.css` (gồm `@import "tailwindcss";` và `@import "./custom.css";`).
+- File đích: `frontend/styles.css` (được nạp trực tiếp vào `frontend/index.html`).
 
-## Kiến trúc MVP
+---
 
+## Kiến trúc Hệ Thống
+
+Chi tiết kiến trúc chuyên sâu: xem [BACKEND_ARCHITECTURE.md](BACKEND_ARCHITECTURE.md).
 
 ```text
-frontend/index.html            shell 3 pane: inspector · stage + timeline · danh sách cue
-frontend/app.js                entry point: mount lần lượt các feature module
-frontend/core/store.js         state tài liệu + event bus (job:loaded, cues:changed, cue:patched…)
-frontend/core/router.js        chuyển màn hình theo data-screen + hash URL
-frontend/core/api.js           mọi lời gọi backend, nơi duy nhất biết hình dạng URL
-frontend/core/dom.js           $, element(), pointer capture
-frontend/core/feedback.js      toast, status bar, chỉ báo lưu
-frontend/core/format.js        timecode, tốc độ đọc (CPS), tiện ích format
-frontend/features/transport.js player, playhead, overlay phụ đề, giữ phát khi kéo
-frontend/features/timeline-view.js nối engine timeline vào state
-frontend/features/cuelist.js   danh sách cue + quyền sở hữu "cue đang chọn"
-frontend/features/inspector.js ô timecode, văn bản, đồng hồ CPS
-frontend/features/editing.js   thêm/cắt/gộp/xóa/chỉnh giờ cue
-frontend/features/history.js   undo/redo theo snapshot
-frontend/features/jobs.js      vòng đời job, SSE, tự lưu
-frontend/features/dashboard.js màn hình Dự án: thống kê, lưới project, tìm/lọc/xóa
-frontend/features/pipeline.js  sidebar: nguồn, capability, chạy AI, xuất file
-frontend/features/shell.js     splitter, theme, thả file toàn cửa sổ
-frontend/features/keymap.js    toàn bộ phím tắt
-frontend/lib/timeline-engine.js thước, dạng sóng, clip kéo thả, playhead, zoom
-backend/app.py            lắp ráp: middleware, ánh xạ lỗi domain → HTTP, mount router + frontend
-backend/config.py         settings đọc từ .env + cấu hình logger `autocc.*`
-backend/httpclient.py     một đường HTTP duy nhất ra ngoài, có retry/backoff cho lỗi tạm thời
-backend/api/system.py     /api/health, /api/capabilities
-backend/api/jobs.py       vòng đời job: tạo, sửa cue, xuất file, khởi động việc nền, SSE
-backend/api/media.py      stream video (HTTP Range), thumbnail, dạng sóng, ghép phụ đề
-backend/jobs/model.py     hình dạng job, danh sách trạng thái, projection ra client
-backend/jobs/store.py     sở hữu state job: khóa, ghi atomic, thông báo thay đổi
-backend/jobs/runner.py    pool worker giới hạn + JobContext (progress, checkpoint)
-backend/jobs/tasks.py     ba luồng việc nền: nhận dạng, phân tích lượt thoại, dịch
-backend/media.py          mọi lệnh gọi ffmpeg + probe media
-backend/subtitles.py      parser/formatter SRT + VTT
-backend/ai.py             adapter faster-whisper, Deepgram + LLM tương thích OpenAI
-backend/tts.py            adapter giọng đọc (edge-tts + provider mock cho test)
-backend/dubbing.py        khớp câu vào cue, cache segment, ghép track lồng tiếng
-runtime/<job-id>/         video, subtitle, waveform.json và metadata tạm thời
+frontend/
+├── index.html                     # Shell 3 pane: Inspector · Stage + Timeline · Danh sách Cue
+├── app.js                         # Entry point: Khởi tạo i18n & mount các feature modules
+├── core/                          # Nền tảng Frontend cốt lõi
+│   ├── api.js                     # Mọi lời gọi HTTP/SSE tới Backend
+│   ├── confirm.js                 # Modal hộp thoại xác nhận tương tác
+│   ├── dom.js                     # $, element(), pointer capture utilities
+│   ├── feedback.js                # Toast thông báo, status bar, save state indicator
+│   ├── format.js                  # Timecode, tốc độ đọc CPS, định dạng văn bản
+│   ├── i18n.js                    # Quản lý ngôn ngữ hiển thị (vi/en)
+│   ├── icons.js                   # SVG icons template registry
+│   ├── router.js                  # Điều hướng màn hình (data-screen + URL hash)
+│   └── store.js                   # State tài liệu trung tâm + Event Bus
+├── features/                      # Các khối tính năng độc lập
+│   ├── cuelist.js                 # Bảng danh sách cue + quản lý cue đang chọn
+│   ├── dashboard.js               # Màn hình Dự án: Danh sách project, tìm kiếm, lọc, xóa, metrics
+│   ├── editing.js                 # Thao tác thêm/cắt/gộp/xóa/co giãn timing cue
+│   ├── history.js                 # Quản lý Undo / Redo đa cấp theo snapshot
+│   ├── inspector.js               # Bảng chỉnh sửa timecode, văn bản gốc, bản dịch, thước đo CPS
+│   ├── jobs.js                    # Vòng đời job, lắng nghe SSE, cơ chế tự động lưu
+│   ├── keymap.js                  # Trình quản lý toàn bộ phím tắt
+│   ├── shell.js                   # Splitter kéo đổi layout, giao diện sáng/tối, kéo thả file
+│   ├── timeline-view.js           # Kết nối Timeline Canvas Engine vào State
+│   ├── transport.js               # Video Player, playhead, subtitle overlay, giữ phát khi kéo
+│   └── pipeline/                  # Sidebar quy trình xử lý AI
+│       ├── index.js               # Điều phối tab và container pipeline
+│       ├── transcribe.js          # Nhận dạng giọng nói (Whisper/Deepgram) & Speaker Diarization
+│       ├── translate.js           # Dịch thuật AI, chọn phong cách & ghim glossary
+│       ├── dubbing.js             # Lồng tiếng TTS, audio ducking & trình phát nghe thử
+│       ├── presets.js             # Quản lý Custom Translation Styles (CRUD)
+│       └── export.js              # Xuất file SRT/VTT và muxing video MP4
+├── i18n/                          # Từ điển bản địa hóa (vi.js, en.js)
+├── lib/
+│   └── timeline-engine.js         # Canvas Timeline Engine: thước đo, dạng sóng, clip kéo thả, playhead, zoom
+└── styles/
+    ├── input.css                  # Tailwind CSS v4 source entry
+    └── custom.css                 # Custom scrollbar, animations và CSS design tokens
+
+backend/
+├── app.py                         # Khởi tạo FastAPI: SelectiveGZipMiddleware, CORS, exception mapping, static files
+├── core/                          # Hạ tầng dùng chung (apikeys, cancellation, config, httpclient, messages)
+├── domain/                        # Thuật toán nghiệp vụ thuần Python
+│   ├── subtitles/                 # parser.py (SRT/VTT/CJK), layout.py, styles.py (StyleStore JSON)
+│   ├── dubbing/                   # aligner.py (fit_segment 3 tầng, fingerprint), audio_dsp.py (PCM thuần)
+│   └── translation/               # style.py (Style presets, glossary parser, StyleBrief)
+├── infrastructure/                # Tích hợp công cụ & Adapter bên ngoài
+│   ├── media/ffmpeg.py            # Wrapper an toàn cho FFmpeg / FFprobe subprocesses
+│   └── providers/                 # Transcription, Translation và TTS Provider Protocols & Registry
+├── ai/                            # Tầng tương tác AI Pipelines
+│   ├── transcription.py           # Faster-Whisper local (CUDA/CPU) + Deepgram cloud
+│   ├── translation.py             # Batching, Context injection, JSON repair, Shortening for dubbing
+│   ├── diarization.py             # Phân tích lượt nói hội thoại qua LLM
+│   ├── llm.py                     # Client OpenAI-compatible chat completions + Transformers local
+│   ├── tts.py                     # EdgeTTS synthesis orchestrator
+│   └── shared.py                  # AI custom errors & progress types
+├── api/                           # Tầng HTTP Routers & Endpoints
+│   ├── jobs.py                    # Router facade chính /api/jobs
+│   ├── job_lifecycle.py           # Upload, Create, List, Delete, Cues Edit, Download
+│   ├── job_operations.py          # Translate, Dub, Analyze Speakers
+│   ├── job_events.py              # Server-Sent Events stream endpoint (/api/jobs/{id}/events)
+│   ├── job_schemas.py             # Pydantic schemas (CueModel, CuesPayload, DubPayload, TranslatePayload)
+│   ├── job_shared.py              # Helpers: claim lock context, save upload, engine resolvers
+│   ├── media.py                   # Stream video (HTTP 206 Partial Content), Waveform, Thumbnail, Muxing
+│   ├── styles.py                  # CRUD Custom Translation Styles (/api/styles)
+│   └── system.py                  # /api/health, /api/capabilities
+├── jobs/                          # Tầng Quản Lý Trạng Thái & Thực Thi Nền
+│   ├── model.py                   # Cấu trúc Job, Status, Phase, make_progress, clean_cues, public_job
+│   ├── store.py                   # JobStore: Thread-safe repository, RLock per-job, atomic JSON persistence
+│   ├── runner.py                  # JobRunner: Dedicated ThreadPoolExecutor pool, JobContext, cancellation
+│   └── tasks.py                   # 4 Background workflows: transcription, speaker analysis, translation, dubbing
+├── runtime/
+│   ├── <job_id>/                  # Thư mục lưu trữ độc lập từng project: job.json, video, audio, waveform, dub cache
+│   └── styles.json                # Lưu trữ danh sách Custom Translation Styles
 ```
 
-Ba quy tắc giữ cho backend dễ sửa về sau:
+---
 
-1. **Không ai mutate job ngoài `store.edit(job_id)`.** Trước đây worker và request
-   handler cùng giữ một dict: worker ghi đè được lên chỉnh sửa của người dùng, xóa
-   project xong worker lại tạo lại thư mục, hai writer có thể ghi lệch thứ tự revision.
-2. **Vùng khóa phải ngắn.** Worker đọc dữ liệu ra, chạy phần việc dài *không giữ khóa*,
-   rồi mở job lại để ghi kết quả — nên `GET /api/jobs/{id}` không bao giờ phải chờ một
-   lượt transcription.
-3. **Tầng dưới không biết HTTP.** `store` và `jobs/` ném `JobNotFound`/`JobConflict`;
-   `app.py` là nơi duy nhất biến chúng thành 404/409.
+## Phím Tắt Tiêu Biểu
 
-Việc nền chạy trong pool riêng có giới hạn (`MAX_CONCURRENT_JOBS`), không dùng
-`BackgroundTasks` nữa: job thứ ba xếp hàng thay vì tranh CPU với hai job đang chạy, và
-mọi lỗi đều rơi vào job dưới dạng `status=error` kèm traceback trong log.
+| Phím | Thao Tác |
+| :--- | :--- |
+| `Space` | Phát / Tạm dừng video |
+| `←` `→` | Lùi / Tiến 1 frame (giữ `Shift` để nhảy 1 giây) |
+| `Ctrl ←` `Ctrl →` | Nhảy về Cue trước / Cue sau |
+| `Ctrl Z` · `Ctrl Y` | Hoàn tác (Undo) · Làm lại (Redo) |
+| `A` · `S` · `G` · `Delete` | Thêm · Cắt · Gộp · Xóa cue |
+| `I` · `O` | Đặt mốc Vào (In) / Ra (Out) tại vị trí playhead |
+| `N` · `F` · `+` `−` | Bật/tắt Hít dính (Snap) · Vừa khung (Fit) · Phóng to / Thu nhỏ Timeline |
+| `Ctrl ↵` | Kích hoạt tác vụ AI chính (Phiên âm) |
+| `F1` | Mở bảng danh mục toàn bộ phím tắt |
 
-Frontend là ES module thuần, không build step. Quy tắc giữ cho nó dễ mở rộng: **module
-không gọi hàm render của module khác** — nó đổi state rồi `emit`, ai quan tâm thì tự vẽ
-lại. Mỗi module chỉ sở hữu vùng DOM và trạng thái bật/tắt nút của riêng mình. Thêm một
-màn hình mới (ví dụ dashboard quản lý project) là viết thêm một feature module rồi mount
-trong `app.js`, không phải sửa module cũ.
+---
 
-- `POST /api/jobs/{id}/transcribe` — nhận dạng lại bằng chính video đã lưu trong `runtime/<job-id>/`, nhận `provider`/`model`/`source_language`/`analyze_speakers` như route upload. Giao diện hỏi xác nhận trước vì cue cũ sẽ bị thay.
+## Triển Khai (Deployment)
 
-Endpoint cho màn hình Dự án:
+Dự án hỗ trợ quy trình CI/CD tự động khi push lên nhánh `main`: kiểm tra test, build Docker image, đẩy lên GitHub Packages (GHCR) và tự động deploy lên máy chủ ảo (VM). Xem hướng dẫn chi tiết tại [DEPLOY.md](DEPLOY.md).
 
-- `GET /api/jobs` — tóm tắt mọi project trong `runtime/` (số cue, thời lượng, tiến độ dịch, dung lượng, thời điểm sửa), không kèm nội dung cue.
-- `DELETE /api/jobs/{id}` — xóa hẳn thư mục project khỏi đĩa.
-- `GET /api/jobs/{id}/thumbnail` — ffmpeg trích một khung ở mốc 10% và cache tại `runtime/<job-id>/thumb.jpg`.
+---
 
-Endpoint phục vụ timeline:
+## Giấy Phép (License)
 
-- `GET /api/jobs/{id}/video` — stream video có hỗ trợ HTTP Range để tua mượt.
-- `GET /api/jobs/{id}/waveform` — ffmpeg giải mã audio thành 20 đỉnh biên độ mỗi giây, cache tại `runtime/<job-id>/waveform.json`. Không có ffmpeg thì timeline vẫn chạy, chỉ thiếu dạng sóng.
-
-### Tiến độ job qua SSE
-
-Mỗi snapshot job có thêm trường `progress`, `null` khi job đứng yên:
-
-```json
-{ "phase": "translating", "current": 40, "total": 60, "ratio": 0.6667, "message": "Đã dịch 40/60 dòng" }
-```
-
-`phase` là một trong `queued`, `transcribing`, `analyzing`, `translating`. `total` là
-`null` khi một bước không tự biết kích thước của mình — Deepgram là một request khép
-kín nên chỉ báo `message`, còn faster-whisper báo theo mốc thời gian trên timeline.
-
-Tiến độ được publish qua SSE nhưng **không** ghi xuống đĩa mỗi nhịp; riêng bản dịch thì
-mỗi batch xong đều được lưu lại, nên một batch hỏng ở phút thứ 40 không làm mất những gì
-đã dịch trước đó — job chuyển sang `error` nhưng vẫn giữ phần đã xong.
-
-## Phím tắt
-
-| Phím | Việc |
-| --- | --- |
-| `Space` | Phát / dừng |
-| `←` `→` | Lùi / tiến 1 frame (giữ `Shift` để nhảy 1 giây) |
-| `Ctrl ←` `Ctrl →` | Cue trước / cue sau |
-| `Ctrl Z` · `Ctrl Y` | Hoàn tác · làm lại (trong ô nhập chữ, undo của trình duyệt được ưu tiên) |
-| `A` · `S` · `G` · `Delete` | Thêm · cắt · gộp · xóa cue |
-| `I` · `O` | Lấy điểm vào / ra tại playhead |
-| `N` · `F` · `+` `−` | Hít dính · vừa khung · phóng to / thu nhỏ |
-| `Ctrl ↵` | Chạy nhận dạng AI |
-| `F1` | Bảng phím tắt |
-
-## Giới hạn hiện tại
-
-- Job state được lưu local theo từng thư mục, chưa có user/account hoặc database.
-- API không có lớp xác thực. App chỉ bind `127.0.0.1` và CORS giới hạn ở origin localhost; đừng expose ra ngoài mạng khi chưa thêm auth.
-- “Ghép vào video” là soft subtitle track trong MP4; chưa có chế độ burn-in chữ vào hình.
-- Riêng ghép video vẫn là request đồng bộ (giữ kết nối HTTP suốt lúc render) chứ chưa phải job nền, vì frontend nhận thẳng blob từ response.
-- Phân tích lượt thoại gọi LLM tuần tự từng batch nên với transcript rất dài vẫn chậm; đã có progress nhưng chưa có cơ chế hủy giữa chừng.
-- Dịch AI cần LLM endpoint đang chạy và có thể cần điều chỉnh prompt/model cho thuật ngữ chuyên ngành.
-- Deepgram là dịch vụ cloud: cần API key, có chi phí theo thời lượng và video được gửi ra ngoài máy.
-
-## Deploy
-
-Push lên `main` là tự động deploy lên VM: CI chạy test, build Docker image, đẩy lên GHCR rồi SSH vào VM pull và restart. Các bước cấu hình một lần (SSH key, secrets, NSG) nằm ở [DEPLOY.md](DEPLOY.md).
-
-## License
-
-Dự án được phân phối dưới giấy phép [MIT License](LICENSE).
-
+Dự án được phân phối dưới giấy phép mã nguồn mở [MIT License](LICENSE).
