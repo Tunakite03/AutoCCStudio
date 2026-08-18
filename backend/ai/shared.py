@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
-from ..config import get_logger
-from ..messages import CodedError, Message
+from ..core.config import get_logger
+from ..core.messages import CodedError, Message
 
 
 class AIProviderError(CodedError):

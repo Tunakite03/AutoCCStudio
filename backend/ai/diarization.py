@@ -3,34 +3,23 @@
 from __future__ import annotations
 
 import json
-import re
 
-from ..config import settings
-from ..messages import Message
-from ..subtitles import strip_speaker_labels
+from ..core.config import settings
+from ..core.messages import Message
+from ..domain.subtitles.layout import (
+    clean_dialogue_layout,
+    dialogue_break_positions,
+    same_dialogue_content,
+)
+from ..domain.subtitles.parser import strip_speaker_labels
 from .llm import _extract_json_value, _llm_completion
 from .shared import OP_SPEAKER_ANALYSIS, AIResponseFormatError, ProgressCallback, _report, logger
 
-
-def _clean_dialogue_layout(text: str) -> str:
-    without_labels = strip_speaker_labels(str(text)).replace("\r\n", "\n").replace("\r", "\n")
-    return "\n".join(line.strip() for line in without_labels.split("\n") if line.strip())
-
-
-def _same_dialogue_content(left: str, right: str) -> bool:
-    collapse = lambda value: re.sub(r"\s+", " ", value).strip()
-    return collapse(left) == collapse(right)
-
-
-def _dialogue_break_positions(text: str) -> set[int]:
-    positions = set()
-    word_count = 0
-    lines = _clean_dialogue_layout(text).splitlines()
-    for line in lines[:-1]:
-        word_count += len(re.findall(r"\S+", line))
-        if word_count:
-            positions.add(word_count)
-    return positions
+# Compatibility aliases for tests and old imports while the shared module is
+# adopted incrementally by the rest of the backend.
+_clean_dialogue_layout = clean_dialogue_layout
+_same_dialogue_content = same_dialogue_content
+_dialogue_break_positions = dialogue_break_positions
 
 
 def _speaker_analysis_item(index: int, cue: dict) -> dict:
@@ -66,7 +55,7 @@ def _extract_dialogue_map(
 
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
         if len(value) == len(target_ids):
-            return dict(zip(target_ids, value))
+            return dict(zip(target_ids, value, strict=False))
         if len(target_ids) == 1 and value:
             return {target_ids[0]: value[0]}
         return {}

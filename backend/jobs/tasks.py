@@ -12,11 +12,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..ai import analyze_dialogue_turns, transcribe_video, translate_cues
-from ..cancellation import OperationCancelled
-from ..config import get_logger
-from ..dubbing import CACHE_DIR, cues_fingerprint, dub_cues, policy_from_settings
-from ..media import encode_audio, mix_dub_over_original
-from ..messages import Message
+from ..core.cancellation import OperationCancelled
+from ..core.config import get_logger
+from ..core.messages import Message
+from ..domain.dubbing.aligner import CACHE_DIR, cues_fingerprint, dub_cues, policy_from_settings
+from ..domain.translation.style import STYLE_AUTO
+from ..infrastructure.media.ffmpeg import encode_audio, mix_dub_over_original
 from .model import (
     PHASE_ANALYZING,
     PHASE_DUBBING,
@@ -25,7 +26,7 @@ from .model import (
     clean_cues,
 )
 from .runner import JobContext, finish
-from ..translation_style import STYLE_AUTO
+from .types import JobRecord
 
 logger = get_logger("jobs.tasks")
 
@@ -37,7 +38,7 @@ def _phase_reporter(context: JobContext, phase: str):
     return report
 
 
-def _apply_speaker_analysis(job: dict, language: str | None, report: dict) -> None:
+def _apply_speaker_analysis(job: JobRecord, language: str | None, report: dict) -> None:
     """Fold an analysis report into the job's speaker-analysis status fields."""
 
     job["speaker_analysis_report"] = report
@@ -222,7 +223,7 @@ def dubbing_task(
     return run
 
 
-def _apply_dubbing_status(job: dict, report: dict) -> None:
+def _apply_dubbing_status(job: JobRecord, report: dict) -> None:
     """A dub with silent lines is partial, not broken — the same as analysis."""
 
     failed = int(report.get("failed_cues", 0))

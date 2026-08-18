@@ -17,8 +17,30 @@ import struct
 import wave
 from pathlib import Path
 
-from .config import get_logger, settings
-from .messages import CodedError, Message
+from ..core.config import get_logger, settings
+from ..core.messages import CodedError, Message
+from ..infrastructure.providers.tts import (
+    PROVIDERS,
+    TTS_EDGE,
+    TTS_MOCK,
+    VOICES,
+    get_tts_provider,
+    resolve_tts_provider_name,
+)
+
+__all__ = [
+    "PROVIDERS",
+    "TTS_EDGE",
+    "TTS_MOCK",
+    "TTSProviderError",
+    "VOICE_NAME_LIMIT",
+    "VOICES",
+    "default_voice",
+    "is_configured",
+    "list_voices",
+    "resolve_tts_provider",
+    "synthesize",
+]
 
 logger = get_logger("tts")
 
@@ -28,25 +50,6 @@ OP_DUB = Message("op.dub")
 class TTSProviderError(CodedError):
     """A voice could not be synthesised: provider missing, refused, or silent."""
 
-
-TTS_EDGE = "edge"
-TTS_MOCK = "mock"
-PROVIDERS = (TTS_EDGE, TTS_MOCK)
-
-# Proper nouns, so the name is data and only the hint is a code the client
-# translates — the same split `api/system.py` uses for model pickers.
-VOICES: dict[str, list[dict]] = {
-    TTS_EDGE: [
-        {"value": "vi-VN-HoaiMyNeural", "name": "Hoài My", "hint": "voice.vi.female"},
-        {"value": "vi-VN-NamMinhNeural", "name": "Nam Minh", "hint": "voice.vi.male"},
-        {"value": "en-US-AriaNeural", "name": "Aria", "hint": "voice.en.female"},
-        {"value": "en-US-GuyNeural", "name": "Guy", "hint": "voice.en.male"},
-        {"value": "ja-JP-NanamiNeural", "name": "Nanami", "hint": "voice.ja.female"},
-        {"value": "ko-KR-SunHiNeural", "name": "Sun-Hi", "hint": "voice.ko.female"},
-        {"value": "zh-CN-XiaoxiaoNeural", "name": "Xiaoxiao", "hint": "voice.zh.female"},
-    ],
-    TTS_MOCK: [{"value": "mock", "name": "Mock", "hint": "voice.mock"}],
-}
 
 # Long enough for a voice id, short enough that nothing else fits.
 VOICE_NAME_LIMIT = 64
@@ -61,11 +64,11 @@ MOCK_TONE_HZ = 180.0
 def resolve_tts_provider(name: str) -> str:
     """Normalise a provider name, falling back to the configured default."""
 
-    resolved = (name or "").strip().lower() or settings.tts_provider.strip().lower()
-    if resolved in {"edge-tts", "edge_tts", "microsoft"}:
-        resolved = TTS_EDGE
-    if resolved not in PROVIDERS:
-        raise TTSProviderError("err.tts.badProvider", provider=resolved)
+    raw = (name or "").strip()
+    resolved = resolve_tts_provider_name(raw, settings.tts_provider)
+    if resolved is None:
+        provider_name = raw.lower() or settings.tts_provider.strip().lower()
+        raise TTSProviderError("err.tts.badProvider", provider=provider_name)
     return resolved
 
 
@@ -110,11 +113,8 @@ def is_configured(provider: str | None = None) -> bool:
         resolved = resolve_tts_provider(provider or "")
     except TTSProviderError:
         return False
-    if resolved == TTS_MOCK:
-        return True
-    import importlib.util
-
-    return importlib.util.find_spec("edge_tts") is not None
+    selected = get_tts_provider(resolved)
+    return selected is not None and selected.is_configured()
 
 
 def synthesize(
@@ -141,9 +141,10 @@ def synthesize(
         raise TTSProviderError("err.tts.badVoice")
 
     destination_stem.parent.mkdir(parents=True, exist_ok=True)
-    if resolved == TTS_MOCK:
-        return _synthesize_mock(spoken, destination_stem.with_suffix(".wav"))
-    return _synthesize_edge(spoken, name, destination_stem.with_suffix(".mp3"), rate)
+    selected = get_tts_provider(resolved)
+    if selected is None:  # resolve_tts_provider already validates this registry lookup.
+        raise TTSProviderError("err.tts.badProvider", provider=resolved)
+    return selected.synthesize(spoken, name, destination_stem, rate)
 
 
 def _synthesize_edge(text: str, voice: str, destination: Path, rate: str) -> Path:
@@ -162,7 +163,7 @@ def _synthesize_edge(text: str, voice: str, destination: Path, rate: str) -> Pat
         # A job worker is a plain thread with no event loop of its own, so this
         # owns one for the length of the call rather than borrowing the app's.
         asyncio.run(render())
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         destination.unlink(missing_ok=True)
         raise TTSProviderError(
             "err.tts.timeout", seconds=settings.tts_timeout_seconds

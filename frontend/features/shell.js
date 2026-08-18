@@ -5,7 +5,7 @@ import { clamp } from "../core/format.js";
 import { toast } from "../core/feedback.js";
 import { LOCALES, currentLocale, setLocale, t } from "../core/i18n.js";
 import { timeline } from "./timeline-view.js";
-import { acceptVideoFile, importSubtitleFile } from "./pipeline.js";
+import { acceptVideoFile, importSubtitleFile } from "./pipeline/index.js";
 
 const LAYOUT_KEY = "autocc.layout";
 const THEME_KEY = "autocc.theme";

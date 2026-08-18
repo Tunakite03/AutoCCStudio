@@ -15,9 +15,9 @@ from .api import jobs as jobs_api
 from .api import media as media_api
 from .api import styles as styles_api
 from .api import system as system_api
-from .config import FRONTEND_DIR, get_logger, settings
+from .core.config import FRONTEND_DIR, get_logger, settings
+from .core.messages import detail
 from .jobs import JobConflict, JobNotFound, runner
-from .messages import detail
 
 logger = get_logger("app")
 

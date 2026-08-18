@@ -11,11 +11,11 @@ import backend.ai.translation as ai_module
 import backend.api.jobs as jobs_api
 import backend.jobs.tasks as tasks_module
 from backend.app import app
-from backend.config import RUNTIME_DIR
+from backend.core.config import RUNTIME_DIR
+from backend.core.messages import Message
 from backend.jobs import runner, store
 from backend.jobs.model import new_job
-from backend.jobs.tasks import speaker_analysis_task, transcription_task, translation_task
-from backend.messages import Message
+from backend.jobs.tasks import transcription_task, translation_task
 
 client = TestClient(app)
 
@@ -763,7 +763,7 @@ def test_a_stop_reaches_a_worker_that_is_waiting_out_a_rate_limit(monkeypatch):
     """Rate-limit backoffs are the longest a worker ever blocks. If the stop is
     only read between HTTP calls, the button looks dead for a whole minute."""
 
-    from backend import httpclient
+    from backend.core import httpclient
 
     job = long_job(name="waiting.srt", count=2, status="processing")
 
@@ -1426,8 +1426,8 @@ def test_a_dubbed_export_is_refused_before_the_project_has_a_dub():
 
 
 def test_capabilities_reports_the_voices_this_install_can_use(monkeypatch):
+    import backend.ai.tts as tts_module
     import backend.api.system as system_api
-    import backend.tts as tts_module
 
     monkeypatch.setattr(
         tts_module, "settings", replace(tts_module.settings, tts_provider="mock")

@@ -1,4 +1,4 @@
 @import "tailwindcss";
-@source "./index.html";
-@source "./**/*.js";
+@source "../index.html";
+@source "../**/*.js";
 @import "./custom.css";

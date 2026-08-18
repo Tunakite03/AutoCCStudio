@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
 
 TIMESTAMP_RE = re.compile(
     r"^(?:(?P<hours>\d+):)?(?P<minutes>\d{1,2}):"

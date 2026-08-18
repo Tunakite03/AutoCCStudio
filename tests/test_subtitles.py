@@ -1,4 +1,4 @@
-from backend.subtitles import (
+from backend.domain.subtitles.parser import (
     CJK_STYLE,
     LATIN_STYLE,
     balance_lines,
@@ -9,7 +9,6 @@ from backend.subtitles import (
     merge_short_cues,
     parse_subtitle,
     parse_timestamp,
-    split_long_cue,
     split_long_cues,
     split_text_into_chunks,
     strip_speaker_labels,

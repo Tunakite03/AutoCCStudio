@@ -20,7 +20,7 @@ import { mountHistory } from "./features/history.js";
 import { mountInspector } from "./features/inspector.js";
 import { hasLastJob, mountJobs, restoreLastJob } from "./features/jobs.js";
 import { mountKeymap } from "./features/keymap.js";
-import { loadCapabilities, mountPipeline } from "./features/pipeline.js";
+import { loadCapabilities, mountPipeline } from "./features/pipeline/index.js";
 import { mountShell } from "./features/shell.js";
 import { mountTimelineView } from "./features/timeline-view.js";
 import { mountTransport } from "./features/transport.js";

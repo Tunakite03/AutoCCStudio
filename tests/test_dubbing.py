@@ -12,8 +12,8 @@ import pytest
 
 import backend.ai as ai_module
 import backend.ai.translation as ai_translation
-import backend.dubbing as dubbing
-from backend.dubbing import (
+import backend.domain.dubbing.aligner as dubbing
+from backend.domain.dubbing.aligner import (
     FIT_EXACT,
     FIT_OVERFLOW,
     FIT_SPED_UP,
@@ -25,7 +25,8 @@ from backend.dubbing import (
     dub_text,
     fit_segment,
 )
-from backend.media import DUB_SAMPLE_RATE, DUB_SAMPLE_WIDTH, find_ffmpeg
+from backend.domain.dubbing.audio_dsp import DUB_SAMPLE_RATE, DUB_SAMPLE_WIDTH
+from backend.infrastructure.media.ffmpeg import find_ffmpeg
 
 POLICY = FitPolicy()
 
@@ -332,7 +333,7 @@ def test_a_failed_shortening_pass_still_produces_a_track(tmp_path, monkeypatch):
 
 
 def test_a_stop_request_is_honoured_inside_the_synthesis_pool(tmp_path):
-    from backend.cancellation import OperationCancelled
+    from backend.core.cancellation import OperationCancelled
 
     def stop():
         raise OperationCancelled("test")

@@ -10,6 +10,7 @@ import { api } from '../core/api.js';
 import { confirmAction } from '../core/confirm.js';
 import { reportError, setStatus, toast } from '../core/feedback.js';
 import { formatDuration, formatFileSize, formatRelativeTime } from '../core/format.js';
+import { icon } from '../core/icons.js';
 import { currentLocale, t } from '../core/i18n.js';
 import { on, state } from '../core/store.js';
 import { showScreen } from '../core/router.js';
@@ -127,8 +128,8 @@ function buildCard(project) {
      media.insertAdjacentHTML(
           'beforeend',
           project.video_available
-               ? `<span class="${mark}" aria-hidden="true"><svg class="w-8.5 h-8.5" viewBox="0 0 24 24"><path d="M9 7.5 17 12l-8 4.5Z"/></svg></span>`
-               : `<span class="${mark} subtitle-only" aria-hidden="true"><svg class="w-8.5 h-8.5" viewBox="0 0 24 24"><path d="M5 7h14M5 11h9M5 15h12"/></svg></span>`,
+               ? `<span class="${mark}" aria-hidden="true">${icon('play', 'w-8.5 h-8.5')}</span>`
+               : `<span class="${mark} subtitle-only" aria-hidden="true">${icon('subtitle', 'w-8.5 h-8.5')}</span>`,
      );
      const status = statusOf(project);
      const badge = element(
@@ -189,7 +190,7 @@ function buildCard(project) {
      remove.type = 'button';
      remove.title = t('card.delete');
      remove.setAttribute('aria-label', t('card.deleteAria', { name }));
-     remove.innerHTML = '<svg class="w-3.75 h-3.75" viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
+     remove.innerHTML = icon('trash', 'w-3.75 h-3.75');
      remove.addEventListener('click', () => askDelete(project));
      actions.append(open, remove);
      footer.appendChild(actions);

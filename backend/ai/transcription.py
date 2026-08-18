@@ -8,12 +8,11 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlencode
 
-from .. import httpclient
-from ..cancellation import OperationCancelled
-from ..config import settings
-from ..media import extract_transcription_audio, media_duration_seconds
-from ..messages import Message
-from ..subtitles import (
+from ..core import httpclient
+from ..core.cancellation import OperationCancelled
+from ..core.config import settings
+from ..core.messages import Message
+from ..domain.subtitles.parser import (
     CJK_CLAUSE_ENDERS,
     CJK_SENTENCE_ENDERS,
     CueStyle,
@@ -24,6 +23,8 @@ from ..subtitles import (
     split_long_cue,
     style_for_text,
 )
+from ..infrastructure.media.ffmpeg import extract_transcription_audio, media_duration_seconds
+from ..infrastructure.providers.transcription import get_transcription_provider
 from .shared import AIProviderError, ProgressCallback, _report
 
 
@@ -243,16 +244,27 @@ def transcribe_video(
     provider: str | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> tuple[list[dict], str | None]:
-    transcription_provider = (provider or settings.transcription_provider).strip().lower()
-    if transcription_provider == "deepgram":
-        return transcribe_video_deepgram(
-            video_path,
-            language=language,
-            model=model_size,
-            on_progress=on_progress,
-        )
-    if transcription_provider not in {"faster_whisper", "whisper"}:
+    """Dispatch transcription through the selected provider adapter."""
+
+    name = (provider or settings.transcription_provider).strip().lower()
+    selected = get_transcription_provider(name)
+    if selected is None:
         raise AIProviderError("err.ai.badTranscriptionProvider")
+    return selected.transcribe(
+        video_path,
+        model=model_size,
+        language=language,
+        on_progress=on_progress,
+    )
+
+
+def _transcribe_faster_whisper(
+    video_path: Path,
+    model_size: str | None = None,
+    language: str | None = None,
+    on_progress: ProgressCallback | None = None,
+) -> tuple[list[dict], str | None]:
+    """Built-in faster-whisper implementation behind its provider adapter."""
 
     model = _whisper_model(
         model_size or settings.whisper_model,
@@ -538,7 +550,9 @@ def _deepgram_word_turns(
             layout = f"{layout[:boundary].rstrip()}\n{layout[boundary:].lstrip()}"
     else:
         reconstructed = " ".join(record["token"] for record in records)
-        collapse = lambda value: re.sub(r"\s+", " ", value).strip()
+        def collapse(value: str) -> str:
+            return re.sub(r"\s+", " ", value).strip()
+
         if collapse(reconstructed) != collapse(transcript):
             return transcript, []
         layout = "\n".join(
@@ -551,7 +565,7 @@ def _deepgram_word_turns(
         return transcript, []
 
     turns = []
-    for run, line in zip(runs, lines):
+    for run, line in zip(runs, lines, strict=False):
         confidences = [
             record["confidence"]
             for record in run["records"]

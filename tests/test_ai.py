@@ -15,8 +15,8 @@ import backend.ai.llm as ai_llm
 import backend.ai.shared as ai_shared
 import backend.ai.transcription as ai_transcription
 import backend.ai.translation as ai_translation
-import backend.subtitles as subtitles
-from backend.cancellation import OperationCancelled
+import backend.domain.subtitles.parser as subtitles
+from backend.core.cancellation import OperationCancelled
 
 
 def test_a_stop_inside_the_decoding_loop_is_not_relabelled_a_whisper_failure(monkeypatch):

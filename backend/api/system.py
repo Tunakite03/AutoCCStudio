@@ -12,11 +12,12 @@ from ..ai import (
     TRANSLATION_TRANSFORMERS,
     resolve_translation_provider,
 )
-from ..config import settings
-from ..media import find_ffmpeg
-from ..messages import Message
-from ..translation_style import style_options
-from ..tts import default_voice, is_configured as tts_is_configured, list_voices, resolve_tts_provider
+from ..ai.tts import default_voice, list_voices, resolve_tts_provider
+from ..ai.tts import is_configured as tts_is_configured
+from ..core.config import settings
+from ..core.messages import Message
+from ..domain.translation.style import style_options
+from ..infrastructure.media.ffmpeg import find_ffmpeg
 
 router = APIRouter(prefix="/api", tags=["system"])
 

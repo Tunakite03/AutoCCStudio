@@ -1,8 +1,7 @@
 import time
 
-from backend.apikeys import CredentialPool
-from backend.config import parse_api_keys
-
+from backend.core.apikeys import CredentialPool
+from backend.core.config import parse_api_keys
 
 # ── Reading the keys out of .env ─────────────────────────────────────
 

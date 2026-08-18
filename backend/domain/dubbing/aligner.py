@@ -22,24 +22,24 @@ from __future__ import annotations
 
 import hashlib
 import wave
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, replace as replace_fields
+from dataclasses import dataclass
+from dataclasses import replace as replace_fields
 from pathlib import Path
-from typing import Callable
 
-from . import tts
-from .cancellation import OperationCancelled, clear_stop_check, set_stop_check
-from .config import get_logger, settings
-from .media import (
+from ...ai import tts
+from ...core.cancellation import OperationCancelled, clear_stop_check, set_stop_check
+from ...core.config import get_logger, settings
+from ...core.messages import CodedError, Message
+from ...infrastructure.media.ffmpeg import decode_to_pcm, retime_pcm
+from ..subtitles.parser import strip_speaker_labels
+from .audio_dsp import (
     DUB_SAMPLE_RATE,
     DUB_SAMPLE_WIDTH,
-    decode_to_pcm,
     pcm_seconds,
-    retime_pcm,
     trim_silence,
 )
-from .messages import CodedError, Message
-from .subtitles import strip_speaker_labels
 
 logger = get_logger("dubbing")
 
@@ -602,7 +602,7 @@ def _shorten_and_refit(
     using the mock voice — has no reason to pay for it.
     """
 
-    from .ai import shorten_for_dubbing
+    from ...ai import shorten_for_dubbing
 
     shortened: set[int] = set()
     for attempt in range(policy.shorten_attempts):

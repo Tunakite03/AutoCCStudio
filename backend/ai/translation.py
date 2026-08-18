@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import json
-from typing import Callable
+from collections.abc import Callable
 
-from ..config import settings
-from ..subtitles import strip_speaker_labels
-from ..translation_style import STYLE_AUTO, StyleBrief, build_style_brief
-from .diarization import _clean_dialogue_layout
-from .llm import _extract_json_value, _llm_completion, _translate_batch_transformers
+from ..core.config import settings
+from ..domain.subtitles.layout import clean_dialogue_layout
+from ..domain.subtitles.parser import strip_speaker_labels
+from ..domain.translation.style import STYLE_AUTO, StyleBrief, build_style_brief
+from ..infrastructure.providers.translation import (
+    TRANSLATION_MOCK,
+    TRANSLATION_OPENAI_COMPATIBLE,
+    TRANSLATION_TRANSFORMERS,
+    get_translation_provider,
+    resolve_translation_provider_name,
+)
+from .llm import _extract_json_value, _llm_completion
 from .shared import (
     OP_DUB_SHORTEN,
     OP_TRANSLATE,
@@ -18,10 +25,15 @@ from .shared import (
     logger,
 )
 
-TRANSLATION_MOCK = "mock"
-TRANSLATION_TRANSFORMERS = "transformers"
-TRANSLATION_OPENAI_COMPATIBLE = "openai_compatible"
-
+__all__ = [
+    "TRANSLATION_MOCK",
+    "TRANSLATION_OPENAI_COMPATIBLE",
+    "TRANSLATION_TRANSFORMERS",
+    "get_translation_settings",
+    "resolve_translation_provider",
+    "shorten_for_dubbing",
+    "translate_cues",
+]
 
 def resolve_translation_provider(name: str) -> str:
     """Map a configured provider name onto the backend that will serve it.
@@ -33,10 +45,17 @@ def resolve_translation_provider(name: str) -> str:
     translation quietly works.
     """
 
-    normalized = name.strip().lower()
-    if normalized in {TRANSLATION_MOCK, TRANSLATION_TRANSFORMERS}:
-        return normalized
-    return TRANSLATION_OPENAI_COMPATIBLE
+    return resolve_translation_provider_name(name)
+
+
+def get_translation_settings():
+    """Current translation settings, exposed for application-layer validation.
+
+    Kept as a function so tests and future app containers can replace the
+    module's settings object without routes reaching into implementation state.
+    """
+
+    return settings
 
 
 def _extract_translation_map(content, line_ids: list[int]) -> dict[int, str]:
@@ -79,7 +98,7 @@ def _extract_translation_map(content, line_ids: list[int]) -> dict[int, str]:
         if all(isinstance(item, str) for item in value):
             # Positional, so trustworthy only when nothing was merged or dropped.
             if len(value) == len(line_ids):
-                return dict(zip(line_ids, value))
+                return dict(zip(line_ids, value, strict=False))
             if len(line_ids) == 1 and value:
                 return {line_ids[0]: value[0]}
             return {}
@@ -329,13 +348,9 @@ def _translate_batch(
     and the local sentence-pair pipeline see one line at a time either way.
     """
 
-    texts = [str(line.get("text", "")) for line in lines]
     resolved_provider = resolve_translation_provider(provider or settings.translation_provider)
-    if resolved_provider == TRANSLATION_MOCK:
-        return [f"[{target_language}] {text}" for text in texts]
-    if resolved_provider == TRANSLATION_TRANSFORMERS:
-        return _translate_batch_transformers(texts, target_language, model_name=model)
-    return _translate_batch_llm(
+    selected = get_translation_provider(resolved_provider)
+    return selected.translate_batch(
         lines,
         target_language,
         context_before=context_before,
@@ -374,7 +389,7 @@ def _seed_translated_lines(
             # Hand-edited into a different number of lines. Keeping it whole on
             # the first line loses the layout; dropping it would lose the work.
             existing = ["\n".join(existing)] + [""] * (len(indexes) - 1)
-        for index, value in zip(indexes, existing):
+        for index, value in zip(indexes, existing, strict=False):
             results[index] = value.strip()
 
 
@@ -417,7 +432,7 @@ def translate_cues(
     translated = [dict(cue) for cue in cues]
     lines: list[dict] = []
     for cue_index, cue in enumerate(translated):
-        cue["text"] = _clean_dialogue_layout(str(cue.get("text", "")))
+        cue["text"] = clean_dialogue_layout(str(cue.get("text", "")))
         for line in cue["text"].splitlines():
             if line.strip():
                 lines.append(
@@ -434,10 +449,12 @@ def translate_cues(
 
     def apply_translations() -> list[dict]:
         per_cue: list[list[str]] = [[] for _cue in translated]
-        for line, value in zip(lines, results):
+        for line, value in zip(lines, results, strict=False):
             if value:
                 per_cue[line["cue"]].append(value)
-        for cue_index, (cue, values) in enumerate(zip(translated, per_cue)):
+        for cue_index, (cue, values) in enumerate(
+            zip(translated, per_cue, strict=False)
+        ):
             if not values and cue_index < resume_at:
                 # Nothing of ours belongs to this cue (blank source text), and
                 # it is behind the resume point — leave its translation alone.
