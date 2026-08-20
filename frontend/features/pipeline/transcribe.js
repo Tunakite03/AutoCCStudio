@@ -11,7 +11,7 @@ import { confirmAction } from "../../core/confirm.js";
 import { reportError, setStatus, toast } from "../../core/feedback.js";
 import { formatFileSize } from "../../core/format.js";
 import { optionLabel, t } from "../../core/i18n.js";
-import { cues, hasCues, state } from "../../core/store.js";
+import { cues, hasCues, isProcessing, state } from "../../core/store.js";
 import { adoptJob, bindPreviewToJob, noteLocalPreview, stopEvents, watchJob } from "../jobs.js";
 import { timeline } from "../timeline-view.js";
 import { showLocalPreview } from "../transport.js";
@@ -187,15 +187,24 @@ async function confirmLanguageSelection() {
   return true;
 }
 
+/** Guards the button against a second click while a run is being kicked off —
+ *  for a large video the upload itself can take a while, and refreshButtons()
+ *  only reacts once the job comes back, leaving the button clickable the
+ *  whole time otherwise. */
+let submitting = false;
+
 export async function transcribe() {
+  if (submitting) return;
   const file = pickedVideo();
   if (!file) return rerunTranscription();
 
-  if (!(await confirmLanguageSelection())) return;
-
-  const form = engineForm();
-  form.append("video", file);
+  submitting = true;
+  $("#transcribe-btn").disabled = true;
   try {
+    if (!(await confirmLanguageSelection())) return;
+
+    const form = engineForm();
+    form.append("video", file);
     setStatus(t("status.uploadingVideo"), "busy");
     const job = await api.transcribe(form);
     bindPreviewToJob(job.id);
@@ -204,31 +213,37 @@ export async function transcribe() {
     watchJob(job.id);
   } catch (error) {
     reportError(error);
+  } finally {
+    submitting = false;
+    if (!isProcessing()) $("#transcribe-btn").disabled = false;
   }
 }
 
 /** Recognise again using the copy the server kept, so reopening a project does
  *  not mean re-uploading a multi-hundred-megabyte file. */
 export async function rerunTranscription() {
+  if (submitting) return;
   const job = state.job;
   if (!job?.video_available) return toast(t("toast.pickVideoFirst"), "error");
 
-  // Language first: it is a fixable input, and the overwrite confirm should be
-  // the last gate before the cues are actually thrown away.
-  if (!(await confirmLanguageSelection())) return;
-
-  if (hasCues()) {
-    const confirmed = await confirmAction({
-      title: t("confirm.rerunTitle"),
-      target: job.video_name || "video",
-      note: t("confirm.rerunNote", { count: cues().length }),
-      confirmLabel: t("confirm.rerunOk"),
-      cancelLabel: t("confirm.keep"),
-    });
-    if (!confirmed) return;
-  }
-
+  submitting = true;
+  $("#transcribe-btn").disabled = true;
   try {
+    // Language first: it is a fixable input, and the overwrite confirm should be
+    // the last gate before the cues are actually thrown away.
+    if (!(await confirmLanguageSelection())) return;
+
+    if (hasCues()) {
+      const confirmed = await confirmAction({
+        title: t("confirm.rerunTitle"),
+        target: job.video_name || "video",
+        note: t("confirm.rerunNote", { count: cues().length }),
+        confirmLabel: t("confirm.rerunOk"),
+        cancelLabel: t("confirm.keep"),
+      });
+      if (!confirmed) return;
+    }
+
     setStatus(t("status.queueingRerun"), "busy");
     const updated = await api.retranscribe(job.id, engineForm());
     adoptJob(updated);
@@ -236,6 +251,9 @@ export async function rerunTranscription() {
     watchJob(updated.id);
   } catch (error) {
     reportError(error);
+  } finally {
+    submitting = false;
+    if (!isProcessing()) $("#transcribe-btn").disabled = false;
   }
 }
 
