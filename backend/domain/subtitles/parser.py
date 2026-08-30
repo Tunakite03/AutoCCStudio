@@ -630,8 +630,8 @@ def parse_timestamp(value: str) -> float:
     return hours * 3600 + minutes * 60 + seconds + millis / 1000
 
 
-def format_timestamp(seconds: float, separator: str = ",") -> str:
-    total_millis = max(0, round(float(seconds) * 1000))
+def format_timestamp(seconds: float | None, separator: str = ",") -> str:
+    total_millis = max(0, round(float(seconds or 0) * 1000))
     hours, remainder = divmod(total_millis, 3_600_000)
     minutes, remainder = divmod(remainder, 60_000)
     whole_seconds, millis = divmod(remainder, 1000)
@@ -711,13 +711,13 @@ def _cue_text(cue: dict, track: str) -> str:
 
 
 def format_subtitle(
-    cues: Iterable[dict], format_name: str = "srt", track: str = "source"
+    cues: Iterable[dict] | None, format_name: str = "srt", track: str = "source"
 ) -> str:
     format_name = format_name.lower().lstrip(".")
     if format_name not in {"srt", "vtt"}:
         raise SubtitleParseError(f"Unsupported subtitle format: {format_name}")
 
-    cue_list = list(cues)
+    cue_list = [c for c in (cues or []) if isinstance(c, dict)]
     chunks: list[str] = ["WEBVTT", ""] if format_name == "vtt" else []
     for index, cue in enumerate(cue_list, start=1):
         start_separator = "." if format_name == "vtt" else ","
