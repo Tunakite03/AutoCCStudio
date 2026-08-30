@@ -23,6 +23,17 @@ AutoCC là ứng dụng local-first để tạo, chỉnh sửa, dịch thuật v
 
 ---
 
+## Chạy trên macOS / Linux
+
+**Yêu cầu:** Python 3.10 trở lên (khuyên dùng Python 3.12).
+
+```bash
+cp .env.example .env
+./run.sh
+```
+
+---
+
 ## Chạy trên Windows
 
 **Yêu cầu:** Python 3.10 trở lên (khuyên dùng Python 3.12). Ứng dụng tự động tìm `ffmpeg` trong `PATH` hệ thống; nếu chưa cài, backend sẽ tự động dùng binary kèm theo từ `imageio-ffmpeg`.

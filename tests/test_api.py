@@ -3,6 +3,7 @@ import shutil
 import threading
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1431,6 +1432,59 @@ def test_export_rejects_an_audio_choice_it_does_not_have():
         assert response.json()["detail"]["code"] == "err.dub.badAudioChoice"
     finally:
         cleanup(job["id"])
+
+
+def test_export_rejects_a_track_choice_it_does_not_have():
+    job = dub_job(video_path=str(RUNTIME_DIR / "nothing.mp4"))
+    try:
+        response = client.post(f"/api/jobs/{job['id']}/mux?track=unknown")
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "err.download.badTrack"
+    finally:
+        cleanup(job["id"])
+
+
+def test_export_mux_supports_source_and_translated_tracks(monkeypatch):
+    import backend.api.media as media_api
+
+    recorded_subtitles = []
+
+    def mock_mux_soft(video_path, subtitle_path, destination):
+        content = Path(subtitle_path).read_text(encoding="utf-8-sig")
+        recorded_subtitles.append(content)
+        destination.write_bytes(b"mock-video-output")
+        return destination
+
+    monkeypatch.setattr(media_api, "mux_soft_subtitles", mock_mux_soft)
+
+    dummy_video = RUNTIME_DIR / "sample_video.mp4"
+    dummy_video.parent.mkdir(parents=True, exist_ok=True)
+    dummy_video.write_bytes(b"fake-video")
+
+    job = make_job(
+        "video_and_subtitle",
+        video_path=str(dummy_video),
+        video_name="sample_video.mp4",
+        cues=[
+            {"id": 1, "start": 0.0, "end": 2.0, "text": "Hello world", "translation": "Xin chào thế giới"}
+        ],
+    )
+    try:
+        # Test track=source
+        res_source = client.post(f"/api/jobs/{job['id']}/mux?track=source")
+        assert res_source.status_code == 200
+        assert "sample_video.source.subtitled.mp4" in res_source.headers.get("content-disposition", "")
+        assert "Hello world" in recorded_subtitles[-1]
+        assert "Xin chào thế giới" not in recorded_subtitles[-1]
+
+        # Test track=translated
+        res_trans = client.post(f"/api/jobs/{job['id']}/mux?track=translated")
+        assert res_trans.status_code == 200
+        assert "sample_video.subtitled.mp4" in res_trans.headers.get("content-disposition", "")
+        assert "Xin chào thế giới" in recorded_subtitles[-1]
+    finally:
+        cleanup(job["id"])
+        dummy_video.unlink(missing_ok=True)
 
 
 def test_a_dubbed_export_is_refused_before_the_project_has_a_dub():

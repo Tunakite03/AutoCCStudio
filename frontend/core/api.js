@@ -124,9 +124,9 @@ export const api = {
       body: JSON.stringify({ cues }),
     }),
 
-  /** `audio` is original | dubbed | both — what the exported MP4 will play. */
-  async mux(jobId, audio = "original") {
-    const response = await fetch(`/api/jobs/${jobId}/mux?audio=${audio}`, { method: "POST" });
+  /** `audio` is original | dubbed | both — what the exported MP4 will play. `track` is source | translated. */
+  async mux(jobId, audio = "original", track = "translated") {
+    const response = await fetch(`/api/jobs/${jobId}/mux?audio=${audio}&track=${track}`, { method: "POST" });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(tm(body.detail, "err.muxFailed"));

@@ -963,6 +963,21 @@
                     >
                   </button>
                   <button
+                    id="download-source-vtt"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >VTT</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="export.sourceVtt"
+                      >VTT Gốc</small
+                    >
+                  </button>
+                  <button
                     id="download-vtt"
                     class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
                     type="button"
@@ -974,7 +989,22 @@
                     ><small
                       class="text-text-dim text-[11px]"
                       data-i18n="export.web"
-                      >Web</small
+                      >VTT Dịch</small
+                    >
+                  </button>
+                  <button
+                    id="mux-source-btn"
+                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    type="button"
+                    disabled
+                  >
+                    <span
+                      class="mono text-accent text-[10px] font-bold tracking-[0.04em]"
+                      >MP4</span
+                    ><small
+                      class="text-text-dim text-[11px]"
+                      data-i18n="export.muxSource"
+                      >Video gốc</small
                     >
                   </button>
                   <button
@@ -989,12 +1019,12 @@
                     ><small
                       class="text-text-dim text-[11px]"
                       data-i18n="export.mux"
-                      >Ghép video</small
+                      >Video dịch</small
                     >
                   </button>
                   <button
                     id="mux-dub-btn"
-                    class="flex items-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
+                    class="col-span-2 flex items-center justify-center gap-1.75 h-8.5 px-2.25 border border-line rounded-sm bg-raised transition-[border-color,background-color,opacity] duration-120 enabled:hover:border-accent-line enabled:hover:bg-raised-hi disabled:opacity-38"
                     type="button"
                     disabled
                   >

@@ -91,8 +91,10 @@ export const en = {
   "section.export": "Export",
   "export.source": "Source",
   "export.translated": "Translation",
-  "export.web": "Web",
-  "export.mux": "Mux video",
+  "export.sourceVtt": "Source VTT",
+  "export.web": "Translated VTT",
+  "export.muxSource": "Source video",
+  "export.mux": "Translated video",
   "capability.checking": "Checking the system…",
   "capability.unreadable": "Could not read the backend configuration.",
   "capability.note":
