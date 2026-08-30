@@ -348,6 +348,24 @@ def test_import_edit_and_download_srt():
         cleanup(job_id)
 
 
+def test_download_subtitle_with_unicode_filename():
+    source = b"1\n00:00:00,000 --> 00:00:01,000\nXin chao\n"
+    response = client.post(
+        "/api/jobs/import-subtitle",
+        files={"file": ("Video Giới Thiệu Khóa Học.srt", source, "application/x-subrip")},
+    )
+    assert response.status_code == 200, response.text
+    job_id = response.json()["id"]
+    try:
+        download = client.get(f"/api/jobs/{job_id}/download?track=source&format=srt")
+        assert download.status_code == 200
+        assert "content-disposition" in download.headers
+        assert "filename*=" in download.headers["content-disposition"]
+        assert download.content.startswith(b"\xef\xbb\xbf")  # UTF-8 BOM
+    finally:
+        cleanup(job_id)
+
+
 def test_rejected_subtitle_import_leaves_no_orphan_directory():
     """The directory is created before the file can be validated; a rejection
     must take it back out rather than leave an invisible husk on disk."""

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import Response
@@ -219,12 +221,16 @@ def download_subtitle(job_id: str, format_name: str, track: str) -> Response:
         raise HTTPException(status_code=400, detail=detail("err.download.badTrack"))
     content = format_subtitle(job.get("cues", []), normalized_format, track)
     stem = Path(job.get("video_name") or job.get("subtitle_name") or "subtitle").stem
+    filename = f"{stem}.{track}.{normalized_format}"
+    quoted_filename = quote(filename)
+    safe_ascii = re.sub(r"[^\x20-\x7E]", "_", filename).replace('"', "")
+    if quoted_filename == filename:
+        disposition = f'attachment; filename="{filename}"'
+    else:
+        disposition = f'attachment; filename="{safe_ascii}"; filename*=utf-8\'\'{quoted_filename}'
+
     return Response(
         content=content.encode("utf-8-sig"),
         media_type="text/plain; charset=utf-8",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{stem}.{track}.{normalized_format}"'
-            )
-        },
+        headers={"Content-Disposition": disposition},
     )
