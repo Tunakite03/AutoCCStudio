@@ -19,8 +19,8 @@ export function downloadSubtitle(track, format) {
   link.click();
 }
 
-/** `audio` is original | dubbed | both — the same render, a different soundtrack. */
-export async function muxVideo(audio = "original") {
+/** `audio` is original | dubbed | both — the same render, a different soundtrack. `track` is source | translated. */
+export async function muxVideo(audio = "original", track = "translated") {
   if (!state.job?.video_available) return toast(t("toast.noVideoToMux"), "error");
   const dubbed = audio !== "original";
   if (dubbed && !state.job?.dub_audio_available) return toast(t("toast.noDubYet"), "error");
@@ -40,11 +40,12 @@ export async function muxVideo(audio = "original") {
 
   try {
     setStatus(t(dubbed ? "status.dubExporting" : "status.muxing"), "busy");
-    const blob = await api.mux(state.job.id, audio);
+    const blob = await api.mux(state.job.id, audio, track);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     const stem = (state.job.video_name || "video").replace(/\.[^.]+$/, "");
-    link.download = `${stem}.${dubbed ? "dubbed" : "subtitled"}.mp4`;
+    const trackSuffix = track === "source" ? ".source" : "";
+    link.download = `${stem}${trackSuffix}.${dubbed ? "dubbed" : "subtitled"}.mp4`;
     link.click();
     URL.revokeObjectURL(link.href);
     setStatus(t(dubbed ? "toast.dubExported" : "status.muxed"));

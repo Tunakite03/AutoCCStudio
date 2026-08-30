@@ -188,12 +188,14 @@ def stream_job_dub_audio(job_id: str, request: Request) -> Response:
 
 
 @router.post("/{job_id}/mux")
-def mux_subtitle(job_id: str, audio: str = "original") -> FileResponse:
-    """Burn the translated track in as a soft subtitle and return the file.
+def mux_subtitle(
+    job_id: str, audio: str = "original", track: str = "translated"
+) -> FileResponse:
+    """Burn subtitles in as a soft subtitle track and return the file.
 
     `audio` decides what the export plays: the original track, the dub, or both
-    with the dub as the default one. It defaults to `original`, so an export
-    made before the project was ever dubbed is the same file it always was.
+    with the dub as the default one. It defaults to `original`.
+    `track` decides which subtitle track to embed: `source` or `translated`.
 
     NOTE: this holds the request open for the whole render. It is the one
     long-running operation that is not a background job, because the browser
@@ -204,25 +206,33 @@ def mux_subtitle(job_id: str, audio: str = "original") -> FileResponse:
     if wanted not in {"original", "dubbed", "both"}:
         raise HTTPException(status_code=400, detail=detail("err.dub.badAudioChoice"))
 
+    wanted_track = track.strip().lower() or "translated"
+    if wanted_track not in {"source", "translated"}:
+        raise HTTPException(status_code=400, detail=detail("err.download.badTrack"))
+
     job = store.read(job_id)
     if not job.get("video_path"):
         raise HTTPException(status_code=400, detail=detail("err.job.subtitleOnly"))
 
     job_dir = store.job_dir(job_id)
-    subtitle_path = job_dir / "current.srt"
+    subtitle_path = job_dir / f"current_{wanted_track}.srt"
     subtitle_path.write_text(
-        format_subtitle(job.get("cues", []), "srt", "translated"), encoding="utf-8-sig"
+        format_subtitle(job.get("cues", []), "srt", wanted_track), encoding="utf-8-sig"
     )
 
     stem = Path(job.get("video_name") or "video").stem
     try:
         if wanted == "original":
-            output_path = job_dir / "output_subtitled.mp4"
+            output_path = job_dir / f"output_subtitled_{wanted_track}.mp4"
             mux_soft_subtitles(Path(job["video_path"]), subtitle_path, output_path)
-            filename = f"{stem}.subtitled.mp4"
+            filename = (
+                f"{stem}.source.subtitled.mp4"
+                if wanted_track == "source"
+                else f"{stem}.subtitled.mp4"
+            )
         else:
             dub_path = _job_dub_path(job_id)
-            output_path = job_dir / "output_dubbed.mp4"
+            output_path = job_dir / f"output_dubbed_{wanted_track}.mp4"
             mux_dubbed_video(
                 Path(job["video_path"]),
                 dub_path,
@@ -230,8 +240,13 @@ def mux_subtitle(job_id: str, audio: str = "original") -> FileResponse:
                 output_path,
                 keep_original_audio=wanted == "both",
             )
-            filename = f"{stem}.dubbed.mp4"
+            filename = (
+                f"{stem}.source.dubbed.mp4"
+                if wanted_track == "source"
+                else f"{stem}.dubbed.mp4"
+            )
     except FFmpegError as exc:
         raise _ffmpeg_http_error(exc) from exc
 
     return FileResponse(output_path, media_type="video/mp4", filename=filename)
+

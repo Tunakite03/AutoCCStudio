@@ -94,8 +94,10 @@ export const vi = {
   "section.export": "Xuất",
   "export.source": "Bản gốc",
   "export.translated": "Bản dịch",
-  "export.web": "Web",
-  "export.mux": "Ghép video",
+  "export.sourceVtt": "VTT Gốc",
+  "export.web": "VTT Dịch",
+  "export.muxSource": "Video gốc",
+  "export.mux": "Video dịch",
   "capability.checking": "Đang kiểm tra hệ thống…",
   "capability.unreadable": "Không đọc được cấu hình backend.",
   "capability.note":

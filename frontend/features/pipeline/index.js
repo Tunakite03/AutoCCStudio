@@ -161,7 +161,11 @@ export function refreshButtons() {
       : t("action.translateFrom");
   $("#download-source-srt").disabled = !cued;
   $("#download-translated-srt").disabled = !cued;
+  const downloadSourceVtt = $("#download-source-vtt");
+  if (downloadSourceVtt) downloadSourceVtt.disabled = !cued;
   $("#download-vtt").disabled = !cued;
+  const muxSourceBtn = $("#mux-source-btn");
+  if (muxSourceBtn) muxSourceBtn.disabled = !cued || !state.job?.video_available;
   $("#mux-btn").disabled = !cued || !state.job?.video_available;
   $("#dub-btn").disabled = blocked || !cued || !state.capabilities?.dubbing_configured;
   // Same wording rule as translation: a project that already has a dub is never
@@ -217,10 +221,18 @@ export function mountPipeline() {
 
   $("#download-source-srt").addEventListener("click", () => downloadSubtitle("source", "srt"));
   $("#download-translated-srt").addEventListener("click", () => downloadSubtitle("translated", "srt"));
+  const downloadSourceVtt = $("#download-source-vtt");
+  if (downloadSourceVtt) {
+    downloadSourceVtt.addEventListener("click", () => downloadSubtitle("source", "vtt"));
+  }
   $("#download-vtt").addEventListener("click", () => downloadSubtitle("translated", "vtt"));
-  $("#mux-btn").addEventListener("click", () => muxVideo("original"));
+  const muxSourceBtn = $("#mux-source-btn");
+  if (muxSourceBtn) {
+    muxSourceBtn.addEventListener("click", () => muxVideo("original", "source"));
+  }
+  $("#mux-btn").addEventListener("click", () => muxVideo("original", "translated"));
   $("#mux-dub-btn").addEventListener("click", () =>
-    muxVideo($("#dub-keep-original").checked ? "both" : "dubbed"),
+    muxVideo($("#dub-keep-original").checked ? "both" : "dubbed", "translated"),
   );
 
   on("job:loaded", () => restoreTranslationFromJob());

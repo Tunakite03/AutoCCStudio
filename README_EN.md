@@ -23,6 +23,17 @@ AutoCC is a local-first application for generating, editing, translating, and du
 
 ---
 
+## Running on macOS / Linux
+
+**Prerequisites:** Python 3.10+ (Python 3.12 recommended).
+
+```bash
+cp .env.example .env
+./run.sh
+```
+
+---
+
 ## Running on Windows
 
 **Prerequisites:** Python 3.10+ (Python 3.12 recommended). The application automatically finds `ffmpeg` in your system `PATH`; otherwise, it falls back to the bundled binary from `imageio-ffmpeg`.
